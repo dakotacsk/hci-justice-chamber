@@ -1,5 +1,27 @@
+
+
 import pygame
 
+# --- UI Components ---
+
+class Button:
+    def __init__(self, x, y, width, height, label, color=(100, 100, 200)):
+        self.rect = pygame.Rect(x, y, width, height)
+        self.label = label
+        self.color = color
+        self.font = pygame.font.Font(None, 24)
+
+    def draw(self, screen):
+        pygame.draw.rect(screen, self.color, self.rect, border_radius=5)
+        label_surface = self.font.render(self.label, True, (255, 255, 255))
+        text_rect = label_surface.get_rect(center=self.rect.center)
+        screen.blit(label_surface, text_rect)
+
+    def is_clicked(self, event):
+        if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+            if self.rect.collidepoint(event.pos):
+                return True
+        return False
 
 class ToggleSwitch:
     def __init__(self, x, y, width, height, label, is_on=True):
@@ -9,225 +31,194 @@ class ToggleSwitch:
         self.font = pygame.font.Font(None, 24)
 
     def draw(self, screen):
-        # Draw the switch background
-        if self.is_on:
-            pygame.draw.rect(screen, (0, 255, 0), self.rect)
-        else:
-            pygame.draw.rect(screen, (255, 0, 0), self.rect)
-
-        # Draw the switch label
-        label_surface = self.font.render(self.label, True, (0, 0, 0))
-        screen.blit(label_surface, (self.rect.x + 5, self.rect.y + 5))
+        color = (34, 139, 34) if self.is_on else (178, 34, 34)
+        pygame.draw.rect(screen, color, self.rect, border_radius=5)
+        label_surface = self.font.render(self.label, True, (255, 255, 255))
+        text_rect = label_surface.get_rect(center=self.rect.center)
+        screen.blit(label_surface, text_rect)
 
     def handle_event(self, event):
-        if event.type == pygame.MOUSEBUTTONDOWN and self.rect.collidepoint(event.pos):
-            self.is_on = not self.is_on
+        if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+            if self.rect.collidepoint(event.pos):
+                self.is_on = not self.is_on
+                return True
+        return False
 
+class TextInputBox:
+    def __init__(self, x, y, width, height, font):
+        self.rect = pygame.Rect(x, y, width, height)
+        self.text = ""
+        self.font = font
+        self.active = False
+        self.color_active = pygame.Color('dodgerblue2')
+        self.color_inactive = pygame.Color('lightgray')
+        self.color = self.color_inactive
+
+    def handle_event(self, event):
+        if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+            self.active = self.rect.collidepoint(event.pos)
+            self.color = self.color_active if self.active else self.color_inactive
+        if event.type == pygame.KEYDOWN and self.active:
+            if event.key == pygame.K_BACKSPACE:
+                self.text = self.text[:-1]
+            else:
+                self.text += event.unicode
+
+    def draw(self, screen):
+        pygame.draw.rect(screen, (255, 255, 255), self.rect)
+        pygame.draw.rect(screen, self.color, self.rect, 2)
+        text_surface = self.font.render(self.text, True, (0, 0, 0))
+        screen.blit(text_surface, (self.rect.x + 5, self.rect.y + 5))
+
+# --- Main UI Views ---
+
+class CreationForm:
+    def __init__(self, screen_width, screen_height):
+        self.font_title = pygame.font.Font(None, 48)
+        self.font_label = pygame.font.Font(None, 32)
+        self.font_input = pygame.font.Font(None, 28)
+        self.width = screen_width
+        self.height = screen_height
+
+        self.questions = [
+            "1. What is the name or title of your justice framework?",
+            "2. In 1-2 sentences, what does justice mean in this worldview?",
+            "3. What are its core values or principles? (comma-separated)",
+            "4. Describe your advocate's tone and personality.",
+        ]
+        
+        self.input_boxes = []
+        self.labels = []
+        
+        input_w = self.width * 0.6
+        input_h = 35
+        start_y = 150
+        y_padding = 100
+
+        for i, q in enumerate(self.questions):
+            y_pos = start_y + i * y_padding
+            label_surface = self.font_label.render(q, True, (255, 255, 255))
+            self.labels.append((label_surface, (self.width / 2 - input_w / 2, y_pos)))
+            box = TextInputBox(self.width / 2 - input_w / 2, y_pos + 40, input_w, input_h, self.font_input)
+            self.input_boxes.append(box)
+
+        self.save_button = Button(self.width / 2 - 100, start_y + len(self.questions) * y_padding, 200, 50, "Save Advocate")
+
+    def handle_event(self, event):
+        for box in self.input_boxes:
+            box.handle_event(event)
+        if self.save_button.is_clicked(event):
+            return { 
+                "name": self.input_boxes[0].text,
+                "definition": self.input_boxes[1].text,
+                "values": self.input_boxes[2].text,
+                "tone": self.input_boxes[3].text,
+            }
+        return None
+
+    def draw(self, screen):
+        screen.fill((20, 20, 40)) # Dark blue background
+        title_surface = self.font_title.render("Create Your Justice Advocate", True, (255, 255, 255))
+        screen.blit(title_surface, (self.width / 2 - title_surface.get_width() / 2, 50))
+
+        for label, pos in self.labels:
+            screen.blit(label, pos)
+        for box in self.input_boxes:
+            box.draw(screen)
+        
+        self.save_button.draw(screen)
 
 class ChatGUI:
-    def __init__(self, agents):
-        pygame.init()
-        pygame.key.set_repeat(300, 30)
-        self.screen_width = 1560
-        self.screen_height = 878
+    def __init__(self, agents, screen_width, screen_height):
+        self.screen_width = screen_width
+        self.screen_height = screen_height
         self.screen = pygame.display.set_mode((self.screen_width, self.screen_height))
         pygame.display.set_caption("Justice Council")
 
-        # Background
-        self.background_image = pygame.image.load("resources/background.jpg")
-        self.background_image = pygame.transform.scale(
-            self.background_image, (self.screen_width, self.screen_height)
-        )
-
-        # Dialogue box
-        self.dialogue_box_image = pygame.image.load("resources/dialogue_box.jpg")
-        self.dialogue_box_image = pygame.transform.scale(
-            self.dialogue_box_image, (self.screen_width * 0.8, 150)
-        )
-
-        # Dialogue box text
+        # Resources
+        self.background_image = pygame.image.load("resources/background.jpg").convert()
+        self.background_image = pygame.transform.scale(self.background_image, (self.screen_width, self.screen_height))
+        self.dialogue_box_image = pygame.image.load("resources/dialogue_box.jpg").convert_alpha()
+        self.dialogue_box_image = pygame.transform.scale(self.dialogue_box_image, (self.screen_width * 0.8, 150))
         self.dialogue_box_rect = pygame.Rect(300, 700, 1080, 125)
 
-        # Text box setup
-        self.input_box = pygame.Rect(
-            1560 - 40 - 500,
-            40,
-            500,
-            int(self.screen_height * 0.2),
-        )
-        self.color = (150, 150, 150)
-        self.active = False
-        self.text = ""
+        # Sprites
+        self.sprites = {
+            "Dr. Sam Iqbal": pygame.transform.scale(pygame.image.load("resources/sprites/utilitarian.jpg").convert_alpha(), (60, 100)),
+            "Amara Ndlovu": pygame.transform.scale(pygame.image.load("resources/sprites/restorative.jpg").convert_alpha(), (60, 100)),
+            "Jamie Reyes": pygame.transform.scale(pygame.image.load("resources/sprites/meritocracy.jpg").convert_alpha(), (60, 100)),
+            "Jordan Chex": pygame.transform.scale(pygame.image.load("resources/sprites/rawlsian.jpg").convert_alpha(), (60, 100)),
+        }
 
-        # Character Sprites
-        self.meritocracy = pygame.image.load("resources/sprites/meritocracy.jpg")
-        self.meritocracy = pygame.transform.scale(self.meritocracy, (60, 100))
-        self.restorative = pygame.image.load("resources/sprites/restorative.jpg")
-        self.restorative = pygame.transform.scale(self.restorative, (60, 100))
-        self.rawlsian = pygame.image.load("resources/sprites/rawlsian.jpg")
-        self.rawlsian = pygame.transform.scale(self.rawlsian, (60, 100))
-        self.utilitarian = pygame.image.load("resources/sprites/utilitarian.jpg")
-        self.utilitarian = pygame.transform.scale(self.utilitarian, (60, 100))
-
-        self.agents = agents
-        self.toggle_switches = []
-        self.action_history = []
-        self.chat_history = []
-        self.input_text = ""
-
+        # State & UI
         self.font = pygame.font.Font(None, 24)
-        self.input_rect = pygame.Rect(
-            10, self.screen_height - 40, self.screen_width - 20, 30
-        )
-
-        self._create_toggle_switches()
+        self.agents = agents
+        self.chat_history = ["The Council is in session. What is the matter you bring before us?"]
+        self.main_input_box = TextInputBox(1560 - 40 - 500, 40, 500, int(self.screen_height * 0.2), self.font)
+        self.create_advocate_button = Button(self.screen_width - 220, self.screen_height - 60, 200, 40, "Create Advocate")
+        self.toggle_switches = self._create_toggle_switches()
 
     def _create_toggle_switches(self):
-        x = 40
-        y = 40
-        for agent_key, agent in self.agents.items():
-            toggle = ToggleSwitch(x, y, 150, 30, agent.profile.name)
-            self.toggle_switches.append(toggle)
+        toggles = []
+        x, y = 40, 40
+        for agent in self.agents.values():
+            toggles.append(ToggleSwitch(x, y, 150, 30, agent.profile.name))
             x += 160
+        return toggles
 
-    def draw_background(self):
-        self.screen.blit(self.background_image, (0, 0))
-
-    def draw_dialogue_box(self):
-        self.screen.blit(self.dialogue_box_image, (self.screen_width * 0.1, 675))
-        if len(self.chat_history) != 0:
-            self.render_wrapped_text(
-                self.chat_history[-1],
-                self.font,
-                (0, 0, 0),
-                self.dialogue_box_rect,
-                self.screen,
-            )
-
-    def draw_sprite(self):
+    def handle_event(self, event):
+        self.main_input_box.handle_event(event)
         for toggle in self.toggle_switches:
-            match toggle.label:
-                case "Dr. Sam Iqbal":
-                    if toggle.is_on:
-                        self.screen.blit(self.utilitarian, (760, 530))
-                case "Amara Ndlovu":
-                    if toggle.is_on:
-                        self.screen.blit(self.restorative, (860, 415))
-                case "Jamie Reyes":
-                    if toggle.is_on:
-                        self.screen.blit(self.meritocracy, (650, 415))
-                case "Jordan Chex":
-                    if toggle.is_on:
-                        self.screen.blit(self.rawlsian, (760, 305))
+            toggle.handle_event(event)
 
-    def draw_textbox(self):
-        self.color = (0, 0, 0) if self.active else (150, 150, 150)
-        pygame.draw.rect(self.screen, self.color, self.input_box, 2)
-        self.render_wrapped_text(
-            self.text, self.font, self.color, self.input_box, self.screen
-        )
+    def draw(self, screen):
+        screen.blit(self.background_image, (0, 0))
+        screen.blit(self.dialogue_box_image, (self.screen_width * 0.1, 675))
+        
+        if self.chat_history:
+            render_wrapped_text(self.chat_history[-1], self.font, (0, 0, 0), self.dialogue_box_rect, screen)
 
-    def _draw_toggle_switches(self):
+        self.main_input_box.draw(screen)
+        self.create_advocate_button.draw(screen)
         for toggle in self.toggle_switches:
-            toggle.draw(self.screen)
+            toggle.draw(screen)
+        
+        self._draw_sprites(screen)
 
-    def _draw_action_history(self):
-        y = 100
-        for message in self.action_history:
-            text_surface = self.font.render(message, True, (0, 0, 0))
-            self.screen.blit(text_surface, (47, y))
-            y += 20
+    def _draw_sprites(self, screen):
+        sprite_positions = {
+            "Dr. Sam Iqbal": (760, 530),
+            "Amara Ndlovu": (860, 415),
+            "Jamie Reyes": (650, 415),
+            "Jordan Chex": (760, 305),
+        }
+        for toggle in self.toggle_switches:
+            if toggle.is_on and toggle.label in self.sprites:
+                screen.blit(self.sprites[toggle.label], sprite_positions[toggle.label])
 
-    def render_wrapped_text(self, text, font, color, rect, surface):
-        """
-        Render text into `rect` on `surface`, wrapping words and handling '\n'.
-        - text: string
-        - font: pygame.font.Font
-        - color: (r,g,b)
-        - rect: pygame.Rect (target box)
-        - surface: pygame.Surface
-        - padding: inner padding in px
-        Returns: total vertical pixels used (so caller can decide about scrolling)
-        """
-        padding = 10
-        x = rect.x + padding
-        y = rect.y + padding
-        max_width = rect.width - 2 * padding
-        line_height = font.get_linesize()
+# --- Utility Functions ---
 
-        # Split input into paragraphs on explicit newline
-        paragraphs = text.split("\n")
-        total_height_used = 0
+def render_wrapped_text(text, font, color, rect, surface):
+    padding = 10
+    x, y = rect.x + padding, rect.y + padding
+    max_width = rect.width - 2 * padding
+    line_height = font.get_linesize()
+    paragraphs = text.split("\n")
 
-        for p_i, para in enumerate(paragraphs):
-            # split paragraph into words (preserve multiple spaces by splitting and rejoining)
-            words = para.split(" ")
-            line = ""
-
-            for w_i, word in enumerate(words):
-                # If line is empty, candidate is the word; else include a leading space
-                candidate = word if line == "" else line + " " + word
-                candidate_width = font.size(candidate)[0]
-
-                if candidate_width <= max_width:
-                    # fits on current line
-                    line = candidate
-                else:
-                    # candidate doesn't fit. If current line is not empty, draw it and start a new line
-                    if line != "":
-                        # draw current line
-                        if y + line_height > rect.bottom - padding:
-                            return total_height_used  # can't draw more — clipped
-                        surface.blit(font.render(line, True, color), (x, y))
-                        y += line_height
-                        total_height_used += line_height
-                        line = word  # start new line with the word
-                        # If word itself is longer than max_width, we must split the word
-                        if font.size(line)[0] > max_width:
-                            # split word into characters to fill line-by-line
-                            part = ""
-                            for ch in line:
-                                if font.size(part + ch)[0] <= max_width:
-                                    part += ch
-                                else:
-                                    # draw part
-                                    if y + line_height > rect.bottom - padding:
-                                        return total_height_used
-                                    surface.blit(font.render(part, True, color), (x, y))
-                                    y += line_height
-                                    total_height_used += line_height
-                                    part = ch
-                            # remaining part becomes the new current line
-                            line = part
-                    else:
-                        # line is empty but the word itself is too long; split characters
-                        part = ""
-                        for ch in word:
-                            if font.size(part + ch)[0] <= max_width:
-                                part += ch
-                            else:
-                                if y + line_height > rect.bottom - padding:
-                                    return total_height_used
-                                surface.blit(font.render(part, True, color), (x, y))
-                                y += line_height
-                                total_height_used += line_height
-                                part = ch
-                        line = part
-
-            # end for words -> draw remaining line for this paragraph
-            if line != "":
-                if y + line_height > rect.bottom - padding:
-                    return total_height_used
+    for para in paragraphs:
+        words = para.split(" ")
+        line = ""
+        for word in words:
+            candidate = f"{line} {word}".strip()
+            if font.size(candidate)[0] <= max_width:
+                line = candidate
+            else:
+                if y + line_height > rect.bottom - padding: return
                 surface.blit(font.render(line, True, color), (x, y))
                 y += line_height
-                total_height_used += line_height
+                line = word
+        if line:
+            if y + line_height > rect.bottom - padding: return
+            surface.blit(font.render(line, True, color), (x, y))
+            y += line_height
 
-            # After each paragraph except the last, force a blank line (honor '\n')
-            if p_i != len(paragraphs) - 1:
-                # add one blank line-height
-                if y + line_height > rect.bottom - padding:
-                    return total_height_used
-                y += line_height
-                total_height_used += line_height
-
-        return total_height_used

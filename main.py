@@ -1,104 +1,167 @@
+
+
 import os
+import sys
 import uuid
 import pygame
+import csv
 from agent import JusticeAgent
-from config import AGENTS
-from gui import ChatGUI
+from config import AGENTS, AgentProfile
+from gui import ChatGUI, CreationForm
 
+CSV_FILE = "advocates.csv"
 
-def main():
-    GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
-    if not GOOGLE_API_KEY:
-        raise SystemExit(
-            "Set GOOGLE_API_KEY from https://aistudio.google.com/app/apikey"
+# --- ADVOCATE DATA HANDLING ---
+
+def build_system_prompt(answers: dict) -> str:
+    """Constructs a coherent system prompt from user answers."""
+    return f"""
+You are an advocate for the justice framework known as '{answers['name']}'.
+Your Core Philosophy: {answers['definition']}
+Your Core Values: Your guiding principles are {answers['values']}.
+Your Personality: You are {answers['tone']}. You engage in dialogue with this personality, consistently reflecting your core philosophy and values in your reasoning and communication style.
+Your Goal: To represent the '{answers['name']}' perspective clearly and persuasively in the Council of Justice.
+""".strip()
+
+def save_to_csv(data: dict):
+    """Saves the custom advocate's data to a CSV file."""
+    uid = str(uuid.uuid4())
+    file_exists = os.path.isfile(CSV_FILE)
+    
+    row = {
+        "uid": uid,
+        "name": data['name'],
+        "definition": data['definition'],
+        "values": data['values'],
+        "tone": data['tone'],
+        "system_prompt": data['system_prompt']
+    }
+
+    with open(CSV_FILE, 'a', newline='', encoding='utf-8') as f:
+        writer = csv.DictWriter(f, fieldnames=row.keys())
+        if not file_exists:
+            writer.writeheader()
+        writer.writerow(row)
+        
+    print(f"✅ Saved your advocate under ID: {uid}\n")
+    return uid
+
+def load_latest_advocate() -> AgentProfile | None:
+    """Loads the most recently created advocate from the CSV file."""
+    if not os.path.isfile(CSV_FILE):
+        return None
+    
+    with open(CSV_FILE, 'r', newline='', encoding='utf-8') as f:
+        reader = csv.DictReader(f)
+        advocates = list(reader)
+        if not advocates:
+            return None
+        
+        latest_advocate_data = advocates[-1]
+        print(f"✅ Loaded most recent advocate: {latest_advocate_data['name']}")
+        return AgentProfile(
+            name=latest_advocate_data['name'],
+            system_prompt=latest_advocate_data['system_prompt']
         )
 
-    agents = {k: JusticeAgent(k, GOOGLE_API_KEY) for k in AGENTS.keys()}
-    agent_name_to_key = {v.name: k for k, v in AGENTS.items()}
+# --- MAIN APPLICATION ---
 
-    gui = ChatGUI(agents)
+def main():
+    pygame.init()
+    pygame.key.set_repeat(300, 30)
+    
+    SCREEN_WIDTH, SCREEN_HEIGHT = 1560, 878
+    screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
 
-    def handle_send_message():
-        user_input = gui.text
-        if not user_input:
-            return
+    # --- Initial State Setup ---
+    if not os.getenv("GOOGLE_API_KEY") and not os.getenv("OPENAI_API_KEY"):
+        print("""
+        ERROR: API KEY NOT FOUND.
+        Please set either the GOOGLE_API_KEY or OPENAI_API_KEY environment variable in your terminal.
 
-        gui.text = ""
+        For example:
+        export GOOGLE_API_KEY='YOUR_API_KEY'
+        """)
+        sys.exit(1)
 
-        active_agents = []
-        for toggle in gui.toggle_switches:
-            if toggle.is_on:
-                agent_key = agent_name_to_key[toggle.label]
-                active_agents.append(agents[agent_key])
+    agents = {key: JusticeAgent(profile) for key, profile in AGENTS.items()}
+    custom_advocate_profile = load_latest_advocate()
+    if custom_advocate_profile:
+        agents["custom"] = JusticeAgent(custom_advocate_profile)
 
-        if not active_agents:
-            gui.chat_history.append("No agents are active.")
-            return
+    app_state = "CHAT"
+    chat_gui = ChatGUI(agents, SCREEN_WIDTH, SCREEN_HEIGHT)
+    creation_form = CreationForm(SCREEN_WIDTH, SCREEN_HEIGHT)
 
-        # For simplicity, the user talks to the first active agent
-        current_agent = active_agents[0]
-        session_id = str(uuid.uuid4())
-        reply = current_agent.send_message(session_id, user_input)
-        gui.chat_history.append(f"{current_agent.profile.name}: {reply}")
-
-        # Cross replies
-        for agent in active_agents:
-            if agent.profile.name != current_agent.profile.name:
-                cross = agent.reply_to(session_id, current_agent.profile.name, reply)
-                gui.chat_history.append(f"{agent.profile.name}: {cross}")
-
-    def handle_toggle(toggle):
-        if not toggle.is_on:
-            agent_key = agent_name_to_key[toggle.label]
-            agent = agents[agent_key]
-            session_id = str(
-                uuid.uuid4()
-            )  # A dummy session id to delete all sessions for this agent
-            agent.end_session(session_id)
-            gui.action_history.append(f"{agent.profile.name} has left the council.")
-        else:
-            agent_key = agent_name_to_key[toggle.label]
-            agent = agents[agent_key]
-            gui.action_history.append(f"{agent.profile.name} has joined the council.")
-
-    gui.handle_send_message = handle_send_message
-
+    # --- Main Loop ---
     running = True
     while running:
-        for event in pygame.event.get():
+        events = pygame.event.get()
+        for event in events:
             if event.type == pygame.QUIT:
                 running = False
 
-            for toggle in gui.toggle_switches:
-                initial_state = toggle.is_on
-                toggle.handle_event(event)
-                if initial_state != toggle.is_on:
-                    handle_toggle(toggle)
+        if app_state == "CHAT":
+            # --- CHAT STATE LOGIC ---
+            for event in events:
+                chat_gui.handle_event(event)
+                if chat_gui.create_advocate_button.is_clicked(event):
+                    app_state = "CREATION"
+                    break
+                if event.type == pygame.KEYDOWN and chat_gui.main_input_box.active:
+                    if event.key == pygame.K_RETURN:
+                        user_input = chat_gui.main_input_box.text
+                        if not user_input: continue
+                        
+                        chat_gui.main_input_box.text = ""
+                        chat_gui.chat_history.append(f"You: {user_input}")
 
-            if event.type == pygame.MOUSEBUTTONDOWN:
-                if gui.input_box.collidepoint(event.pos):
-                    gui.active = not gui.active
-                else:
-                    gui.active = False
+                        active_agents = [agent for agent, toggle in zip(chat_gui.agents.values(), chat_gui.toggle_switches) if toggle.is_on]
+                        if not active_agents:
+                            chat_gui.chat_history.append("No agents are active.")
+                            continue
 
-            if event.type == pygame.KEYDOWN and gui.active:
-                if event.key == pygame.K_RETURN:
-                    handle_send_message()
-                elif event.key == pygame.K_BACKSPACE:
-                    gui.text = gui.text[:-1]
-                else:
-                    gui.text += event.unicode
+                        session_id = str(uuid.uuid4())
+                        for agent in active_agents:
+                            agent.memory.add(session_id, "User", "user", user_input)
 
-        gui.draw_background()
-        gui.draw_dialogue_box()
-        gui.draw_textbox()
-        gui.draw_sprite()
-        gui._draw_toggle_switches()
-        gui._draw_action_history()
+                        custom_agent = agents.get("custom")
+                        if custom_agent and custom_agent in active_agents:
+                            reply = custom_agent.generate_response(session_id)
+                            chat_gui.chat_history.append(f"{custom_agent.profile.name}: {reply}")
+
+                        for agent in active_agents:
+                            if not custom_agent or agent.profile.name != custom_agent.profile.name:
+                                cross_reply = agent.generate_response(session_id)
+                                chat_gui.chat_history.append(f"{agent.profile.name}: {cross_reply}")
+            
+            chat_gui.draw(screen)
+
+        elif app_state == "CREATION":
+            # --- CREATION STATE LOGIC ---
+            for event in events:
+                new_advocate_data = creation_form.handle_event(event)
+                if new_advocate_data:
+                    # All fields must be filled
+                    if all(new_advocate_data.values()):
+                        system_prompt = build_system_prompt(new_advocate_data)
+                        new_advocate_data['system_prompt'] = system_prompt
+                        save_to_csv(new_advocate_data)
+                        
+                        # Create and add the new agent
+                        new_profile = AgentProfile(name=new_advocate_data['name'], system_prompt=system_prompt)
+                        agents["custom"] = JusticeAgent(new_profile)
+                        
+                        # Re-initialize the chat GUI with the new agent list
+                        chat_gui = ChatGUI(agents, SCREEN_WIDTH, SCREEN_HEIGHT)
+                        app_state = "CHAT"
+                        break
+            
+            creation_form.draw(screen)
+
         pygame.display.flip()
 
     pygame.quit()
-
 
 if __name__ == "__main__":
     main()
