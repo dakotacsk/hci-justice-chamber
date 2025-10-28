@@ -3,6 +3,7 @@ import google.generativeai as genai
 from config import AGENTS, MODEL_NAME
 from memory import ChatMemory
 
+
 class JusticeAgent:
     def __init__(self, agent_key: str, api_key: str, db_path="./justice_memory.db"):
         if agent_key not in AGENTS:
@@ -23,13 +24,16 @@ class JusticeAgent:
     def send_message(self, session_id: str, text: str) -> str:
         self.memory.add(session_id, self.profile.name, "user", text)
         context = self._build_context(session_id)
-        prompt = f"{self.profile.system_prompt}\n\nContext:\n{context}\n\nUser: {text}\n{self.profile.name}:"
-        response = self.model.generate_content(prompt, safety_settings={
-            'HARM_CATEGORY_HATE_SPEECH': 'BLOCK_NONE',
-            'HARM_CATEGORY_HARASSMENT': 'BLOCK_NONE',
-            'HARM_CATEGORY_SEXUALLY_EXPLICIT': 'BLOCK_NONE',
-            'HARM_CATEGORY_DANGEROUS_CONTENT': 'BLOCK_NONE',
-        })
+        prompt = f"{self.profile.system_prompt}\n\nContext:\n{context}\n\nUser: {text} (respond under 1500 characters)\n{self.profile.name}:"
+        response = self.model.generate_content(
+            prompt,
+            safety_settings={
+                "HARM_CATEGORY_HATE_SPEECH": "BLOCK_NONE",
+                "HARM_CATEGORY_HARASSMENT": "BLOCK_NONE",
+                "HARM_CATEGORY_SEXUALLY_EXPLICIT": "BLOCK_NONE",
+                "HARM_CATEGORY_DANGEROUS_CONTENT": "BLOCK_NONE",
+            },
+        )
         reply = response.text.strip()
         self.memory.add(session_id, self.profile.name, "assistant", reply)
         return reply
@@ -39,14 +43,17 @@ class JusticeAgent:
         prompt = (
             f"{self.profile.system_prompt}\n\n"
             f"Context (recent dialogue among agents):\n{context}\n\n"
-            f"{other_agent_name}: {text}\n{self.profile.name}:"
+            f"{other_agent_name}: {text} (respond under 1500 characters) \n{self.profile.name}:"
         )
-        response = self.model.generate_content(prompt, safety_settings={
-            'HARM_CATEGORY_HATE_SPEECH': 'BLOCK_NONE',
-            'HARM_CATEGORY_HARASSMENT': 'BLOCK_NONE',
-            'HARM_CATEGORY_SEXUALLY_EXPLICIT': 'BLOCK_NONE',
-            'HARM_CATEGORY_DANGEROUS_CONTENT': 'BLOCK_NONE',
-        })
+        response = self.model.generate_content(
+            prompt,
+            safety_settings={
+                "HARM_CATEGORY_HATE_SPEECH": "BLOCK_NONE",
+                "HARM_CATEGORY_HARASSMENT": "BLOCK_NONE",
+                "HARM_CATEGORY_SEXUALLY_EXPLICIT": "BLOCK_NONE",
+                "HARM_CATEGORY_DANGEROUS_CONTENT": "BLOCK_NONE",
+            },
+        )
         reply = response.text.strip()
         self.memory.add(session_id, self.profile.name, "assistant", reply)
         return reply
