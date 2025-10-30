@@ -57,7 +57,7 @@ class JusticeAgent:
             
         return formatted_history
 
-    def generate_response(self, session_id: str, initial_prompt: str = None) -> str:
+    def generate_response(self, session_id: str, initial_prompt: str = None, max_tokens: int = 100) -> str:
         """Generates a response based on the conversation history."""
         client = self._get_llm_client()
         if not client:
@@ -82,7 +82,13 @@ class JusticeAgent:
                     MODEL_NAME,
                     system_instruction=self.profile.system_prompt
                 )
-                response = model.generate_content(gemini_history)
+                generation_config = genai.types.GenerationConfig(
+                    max_output_tokens=max_tokens
+                )
+                response = model.generate_content(
+                    gemini_history,
+                    generation_config=generation_config
+                )
                 reply = response.text.strip()
             
             elif client == "openai":
@@ -93,6 +99,7 @@ class JusticeAgent:
                     model="gpt-4o-mini",
                     messages=messages,
                     temperature=0.7,
+                    max_tokens=max_tokens,
                 )
                 reply = response.choices[0].message.content.strip()
             else:
