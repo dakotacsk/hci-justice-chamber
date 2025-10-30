@@ -67,6 +67,11 @@ def load_latest_advocate() -> AgentProfile | None:
 # --- MAIN APPLICATION ---
 
 def main():
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--max_tokens", type=int, default=100, help="Maximum number of tokens for agent responses.")
+    args = parser.parse_args()
+
     pygame.init()
     pygame.key.set_repeat(300, 30)
     
@@ -127,12 +132,12 @@ def main():
 
                         custom_agent = agents.get("custom")
                         if custom_agent and custom_agent in active_agents:
-                            reply = custom_agent.generate_response(session_id)
+                            reply = custom_agent.generate_response(session_id, max_tokens=args.max_tokens)
                             chat_gui.chat_history.append(f"{custom_agent.profile.name}: {reply}")
 
                         for agent in active_agents:
                             if not custom_agent or agent.profile.name != custom_agent.profile.name:
-                                cross_reply = agent.generate_response(session_id)
+                                cross_reply = agent.generate_response(session_id, max_tokens=args.max_tokens)
                                 chat_gui.chat_history.append(f"{agent.profile.name}: {cross_reply}")
             
             chat_gui.draw(screen)
