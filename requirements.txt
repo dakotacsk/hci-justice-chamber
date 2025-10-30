@@ -1,1 +1,3 @@
 langchain-google-genai
+pygame
+google-generativeai
