@@ -13,14 +13,7 @@ except (ImportError, Exception):
     genai = None
     GOOGLE_API_KEY = None
 
-try:
-    import openai
-    OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
-    if OPENAI_API_KEY:
-        openai.api_key = OPENAI_API_KEY
-except (ImportError, Exception):
-    openai = None
-    OPENAI_API_KEY = None
+
 
 
 class JusticeAgent:
@@ -31,11 +24,8 @@ class JusticeAgent:
 
     def _get_llm_client(self):
         """Determines which LLM client to use based on availability."""
-        if self.model_preference == "gemini" and genai and GOOGLE_API_KEY:
+        if genai and GOOGLE_API_KEY:
             return genai.GenerativeModel(MODEL_NAME)
-        elif openai and OPENAI_API_KEY:
-            # Fallback to OpenAI if Gemini is not available/configured
-            return "openai"
         else:
             return None
 
@@ -70,7 +60,7 @@ class JusticeAgent:
              history.append({"role": "user", "content": f"[User]: {initial_prompt}"})
 
         try:
-            if self.model_preference == "gemini" and client != "openai":
+            if client:
                 # Gemini uses 'parts' and a different role system
                 gemini_history = []
                 for turn in history:
@@ -90,18 +80,6 @@ class JusticeAgent:
                     generation_config=generation_config
                 )
                 reply = response.text.strip()
-            
-            elif client == "openai":
-                messages = [{"role": "system", "content": self.profile.system_prompt}]
-                messages.extend(history)
-                
-                response = openai.chat.completions.create(
-                    model="gpt-4o-mini",
-                    messages=messages,
-                    temperature=0.7,
-                    max_tokens=max_tokens,
-                )
-                reply = response.choices[0].message.content.strip()
             else:
                  reply = f"({self.profile.name} has no configured LLM.)"
 

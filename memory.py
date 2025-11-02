@@ -22,6 +22,12 @@ class ChatMemory:
         self.conn = sqlite3.connect(db_path, check_same_thread=False)
         self.conn.executescript(_SCHEMA)
         self.conn.commit()
+        self.clear_all()
+
+    def clear_all(self):
+        """Clears all messages from the database."""
+        self.conn.execute("DELETE FROM messages")
+        self.conn.commit()
 
     def add(self, session_id: str, agent: str, role: str, content: str):
         self.conn.execute(

@@ -166,6 +166,13 @@ def main():
 
         pygame.display.flip()
 
+    # --- Shutdown ---
+    if agents:
+        # Clear the database on exit
+        any_agent = next(iter(agents.values()))
+        any_agent.memory.clear_all()
+        print(" DB cleared.")
+
     pygame.quit()
 
 if __name__ == "__main__":
