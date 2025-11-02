@@ -149,6 +149,11 @@ class CreationForm:
 
 class ChatGUI:
     def __init__(self, agents, screen_width, screen_height):
+        # multiple lines test
+        self.start_time = None
+        self.talking = True
+        self.chat_count = 0
+
         self.screen_width = screen_width
         self.screen_height = screen_height
         self.screen = pygame.display.set_mode((self.screen_width, self.screen_height))
@@ -191,7 +196,9 @@ class ChatGUI:
         self.font = pygame.font.Font(None, 24)
         self.agents = agents
         self.chat_history = [
-            "Sed ut perspiciatis unde omnis iste natus error sit voluptatem accusantium doloremque laudantium, totam rem aperiam, eaque ipsa quae ab illo inventore veritatis et quasi architecto beatae vitae dicta sunt explicabo. Nemo enim ipsam voluptatem quia voluptas sit aspernatur aut odit aut fugit, sed quia consequuntur magni dolores eos qui ratione voluptatem sequi nesciunt. Neque porro quisquam est, qui dolorem ipsum quia dolor sit amet, consectetur, adipisci velit, sed quia non numquam eius modi tempora incidunt ut labore et dolore magnam aliquam quaerat voluptatem. Ut enim ad minima veniam, quis nostrum exercitationem ullam corporis suscipit laboriosam, nisi ut aliquid ex ea commodi consequatur? Quis autem vel eum iure reprehenderit qui in ea voluptate velit esse quam nihil molestiae consequatur, vel illum qui dolorem eum fugiat quo voluptas nulla pariatur?"
+            "Please ask us any questions about Justice...",
+            "LOLOLOLOL",
+            "BYEEEEEE",
         ]
         self.main_input_box = TextInputBox(
             1560 - 40 - 500, 40, 500, int(self.screen_height * 0.2), self.font
@@ -219,8 +226,17 @@ class ChatGUI:
         screen.blit(self.dialogue_box_image, (self.screen_width * 0.1, 675))
 
         if self.chat_history:
+            print(len(self.chat_history))
+            if self.start_time is None and len(self.chat_history) - 1 > self.chat_count:
+                self.start_time = time.time()
+            if self.start_time and self.start_time + 5 < time.time():
+                self.chat_count = self.chat_count + 1
+                if len(self.chat_history) - 1 > self.chat_count:
+                    self.start_time = time.time()
+                else:
+                    self.start_time = None
             render_wrapped_text(
-                self.chat_history[-1],
+                self.chat_history[self.chat_count],
                 self.font,
                 (0, 0, 0),
                 self.dialogue_box_rect,
