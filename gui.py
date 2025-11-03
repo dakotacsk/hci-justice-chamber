@@ -25,7 +25,7 @@ class Button:
 
 
 class ToggleSwitch:
-    def __init__(self, x, y, width, height, label, is_on=True):
+    def __init__(self, x, y, width, height, label, is_on=False):
         self.rect = pygame.Rect(x, y, width, height)
         self.label = label
         self.is_on = is_on
@@ -196,9 +196,7 @@ class ChatGUI:
         self.font = pygame.font.Font(None, 24)
         self.agents = agents
         self.chat_history = [
-            "Please ask us any questions about Justice...",
-            "LOLOLOLOL",
-            "BYEEEEEE",
+            "Please select who you would want to talk to...",
         ]
         input_box_x = 1560 - 40 - 500
         input_box_y = 40
