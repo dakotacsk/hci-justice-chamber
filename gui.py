@@ -47,9 +47,10 @@ class ToggleSwitch:
 
 
 class TextInputBox:
-    def __init__(self, x, y, width, height, font):
+    def __init__(self, x, y, width, height, font, placeholder=""):
         self.rect = pygame.Rect(x, y, width, height)
         self.text = ""
+        self.placeholder = placeholder
         self.font = font
         self.active = False
         self.color_active = pygame.Color("dodgerblue2")
@@ -69,8 +70,12 @@ class TextInputBox:
     def draw(self, screen):
         pygame.draw.rect(screen, (255, 255, 255), self.rect)
         pygame.draw.rect(screen, self.color, self.rect, 2)
-        text_surface = self.font.render(self.text, True, (0, 0, 0))
-        screen.blit(text_surface, (self.rect.x + 5, self.rect.y + 5))
+        if self.text:
+            text_surface = self.font.render(self.text, True, (0, 0, 0))
+            screen.blit(text_surface, (self.rect.x + 5, self.rect.y + 5))
+        else:
+            placeholder_surface = self.font.render(self.placeholder, True, (150, 150, 150))
+            screen.blit(placeholder_surface, (self.rect.x + 5, self.rect.y + 5))
 
 
 # --- Main UI Views ---
@@ -201,10 +206,10 @@ class ChatGUI:
         input_box_height = int(self.screen_height * 0.2)
         
         self.main_input_box = TextInputBox(
-            input_box_x, input_box_y, input_box_width, input_box_height, self.font
+            input_box_x, input_box_y, input_box_width, input_box_height, self.font, placeholder="(type here...)"
         )
         self.submit_button = Button(
-            input_box_x + input_box_width + 10, input_box_y, 120, 40, "Submit"
+            input_box_x + input_box_width - 120, input_box_y + input_box_height + 10, 120, 40, "Submit"
         )
         self.create_advocate_button = Button(
             self.screen_width - 220, self.screen_height - 60, 200, 40, "Create Advocate"
