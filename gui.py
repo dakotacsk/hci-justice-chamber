@@ -9,7 +9,7 @@ class Button:
         self.rect = pygame.Rect(x, y, width, height)
         self.label = label
         self.color = color
-        self.font = pygame.font.Font(None, 24)
+        self.font = pygame.font.Font(None, int(24 * 0.8))
 
     def draw(self, screen):
         pygame.draw.rect(screen, self.color, self.rect, border_radius=5)
@@ -29,7 +29,7 @@ class ToggleSwitch:
         self.rect = pygame.Rect(x, y, width, height)
         self.label = label
         self.is_on = is_on
-        self.font = pygame.font.Font(None, 24)
+        self.font = pygame.font.Font(None, int(24 * 0.8))
 
     def draw(self, screen):
         color = (34, 139, 34) if self.is_on else (178, 34, 34)
@@ -59,7 +59,7 @@ class TextInputBox:
         self.lines = [""]
         self.scroll_offset = 0
         self.line_height = font.get_linesize()
-        self.scrollbar_width = 15
+        self.scrollbar_width = int(15 * 0.8)
         self.dragging_scrollbar = False
 
     def handle_event(self, event):
@@ -172,9 +172,9 @@ class TextInputBox:
 
 class CreationForm:
     def __init__(self, screen_width, screen_height):
-        self.font_title = pygame.font.Font(None, 48)
-        self.font_label = pygame.font.Font(None, 32)
-        self.font_input = pygame.font.Font(None, 28)
+        self.font_title = pygame.font.Font(None, int(48 * 0.8))
+        self.font_label = pygame.font.Font(None, int(32 * 0.8))
+        self.font_input = pygame.font.Font(None, int(28 * 0.8))
         self.width = screen_width
         self.height = screen_height
 
@@ -189,9 +189,9 @@ class CreationForm:
         self.labels = []
 
         input_w = self.width * 0.6
-        input_h = 35
-        start_y = 150
-        y_padding = 100
+        input_h = int(35 * 0.8)
+        start_y = int(150 * 0.8)
+        y_padding = int(100 * 0.8)
 
         for i, q in enumerate(self.questions):
             y_pos = start_y + i * y_padding
@@ -199,7 +199,7 @@ class CreationForm:
             self.labels.append((label_surface, (self.width / 2 - input_w / 2, y_pos)))
             box = TextInputBox(
                 self.width / 2 - input_w / 2,
-                y_pos + 40,
+                y_pos + int(40 * 0.8),
                 input_w,
                 input_h,
                 self.font_input,
@@ -207,10 +207,10 @@ class CreationForm:
             self.input_boxes.append(box)
 
         self.save_button = Button(
-            self.width / 2 - 100,
+            self.width / 2 - int(100 * 0.8),
             start_y + len(self.questions) * y_padding,
-            200,
-            50,
+            int(200 * 0.8),
+            int(50 * 0.8),
             "Save Advocate",
         )
 
@@ -231,7 +231,7 @@ class CreationForm:
         title_surface = self.font_title.render(
             "Create Your Justice Advocate", True, (255, 255, 255)
         )
-        screen.blit(title_surface, (self.width / 2 - title_surface.get_width() / 2, 50))
+        screen.blit(title_surface, (self.width / 2 - title_surface.get_width() / 2, int(50 * 0.8)))
 
         for label, pos in self.labels:
             screen.blit(label, pos)
@@ -257,61 +257,61 @@ class ChatGUI:
             "resources/dialogue_box.jpg"
         ).convert_alpha()
         self.dialogue_box_image = pygame.transform.scale(
-            self.dialogue_box_image, (self.screen_width * 0.8, 150)
+            self.dialogue_box_image, (self.screen_width * 0.8, int(150 * 0.8))
         )
-        self.dialogue_box_rect = pygame.Rect(300, 700, 1080, 125)
+        self.dialogue_box_rect = pygame.Rect(int(300 * 0.8), int(700 * 0.8), int(1080 * 0.8), int(125 * 0.8))
 
         # Sprites
         self.sprites = {
             "Dr. Sam Iqbal": pygame.transform.scale(
                 pygame.image.load("resources/sprites/utilitarian.png").convert_alpha(),
-                (60, 100),
+                (int(60 * 0.8), int(100 * 0.8)),
             ),
             "Amara Ndlovu": pygame.transform.scale(
                 pygame.image.load("resources/sprites/restorative.png").convert_alpha(),
-                (60, 100),
+                (int(60 * 0.8), int(100 * 0.8)),
             ),
             "Jamie Reyes": pygame.transform.scale(
                 pygame.image.load("resources/sprites/meritocracy.png").convert_alpha(),
-                (60, 100),
+                (int(60 * 0.8), int(100 * 0.8)),
             ),
             "Jordan Chex": pygame.transform.scale(
                 pygame.image.load("resources/sprites/rawlsian.png").convert_alpha(),
-                (60, 100),
+                (int(60 * 0.8), int(100 * 0.8)),
             ),
         }
 
         # State & UI
-        self.font = pygame.font.Font(None, 24)
+        self.font = pygame.font.Font(None, int(24 * 0.8))
         self.agents = agents
         self.chat_history = [
             "Please select who you would want to talk to...",
         ]
         self.chat_scroll_offset = 0
-        self.chat_scrollbar_width = 15
+        self.chat_scrollbar_width = int(15 * 0.8)
         self.dragging_chat_scrollbar = False
-        input_box_x = 1560 - 40 - 500
-        input_box_y = 40
-        input_box_width = 500
+        input_box_x = int((1560 - 40 - 500) * 0.8)
+        input_box_y = int(40 * 0.8)
+        input_box_width = int(500 * 0.8)
         input_box_height = int(self.screen_height * 0.2)
         
         self.main_input_box = TextInputBox(
             input_box_x, input_box_y, input_box_width, input_box_height, self.font, placeholder="(type here...)"
         )
         self.submit_button = Button(
-            input_box_x + input_box_width - 120, input_box_y + input_box_height + 10, 120, 40, "Submit"
+            input_box_x + input_box_width - int(120 * 0.8), input_box_y + input_box_height + int(10 * 0.8), int(120 * 0.8), int(40 * 0.8), "Submit"
         )
         self.create_advocate_button = Button(
-            self.screen_width - 220, self.screen_height - 60, 200, 40, "Create Advocate"
+            self.screen_width - int(220 * 0.8), self.screen_height - int(60 * 0.8), int(200 * 0.8), int(40 * 0.8), "Create Advocate"
         )
         self.toggle_switches = self._create_toggle_switches()
 
     def _create_toggle_switches(self):
         toggles = []
-        x, y = 40, 40
+        x, y = int(40 * 0.8), int(40 * 0.8)
         for agent in self.agents.values():
-            toggles.append(ToggleSwitch(x, y, 150, 30, agent.profile.name))
-            x += 160
+            toggles.append(ToggleSwitch(x, y, int(150 * 0.8), int(30 * 0.8), agent.profile.name))
+            x += int(160 * 0.8)
         return toggles
 
     def handle_event(self, event):
@@ -370,7 +370,7 @@ class ChatGUI:
 
     def draw(self, screen):
         screen.blit(self.background_image, (0, 0))
-        screen.blit(self.dialogue_box_image, (self.screen_width * 0.1, 675))
+        screen.blit(self.dialogue_box_image, (self.screen_width * 0.1, int(675 * 0.8)))
 
         chat_scrollbar_rect = self._get_chat_scrollbar_rect()
         if chat_scrollbar_rect:
@@ -401,10 +401,10 @@ class ChatGUI:
 
     def _draw_sprites(self, screen):
         sprite_positions = {
-            "Dr. Sam Iqbal": (760, 530),
-            "Amara Ndlovu": (860, 415),
-            "Jamie Reyes": (650, 415),
-            "Jordan Chex": (760, 305),
+            "Dr. Sam Iqbal": (int(760 * 0.8), int(530 * 0.8)),
+            "Amara Ndlovu": (int(860 * 0.8), int(415 * 0.8)),
+            "Jamie Reyes": (int(650 * 0.8), int(415 * 0.8)),
+            "Jordan Chex": (int(760 * 0.8), int(305 * 0.8)),
         }
         for toggle in self.toggle_switches:
             if toggle.is_on and toggle.label in self.sprites:

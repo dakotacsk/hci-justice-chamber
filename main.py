@@ -76,7 +76,7 @@ def main():
     pygame.init()
     pygame.key.set_repeat(300, 30)
     
-    SCREEN_WIDTH, SCREEN_HEIGHT = 1560, 878
+    SCREEN_WIDTH, SCREEN_HEIGHT = 1248, 702
     screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
 
     # --- Initial State Setup ---
