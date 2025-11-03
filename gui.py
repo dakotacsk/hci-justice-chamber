@@ -59,11 +59,36 @@ class TextInputBox:
         self.lines = [""]
         self.scroll_offset = 0
         self.line_height = font.get_linesize()
+        self.scrollbar_width = 15
+        self.dragging_scrollbar = False
 
     def handle_event(self, event):
         if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
-            self.active = self.rect.collidepoint(event.pos)
-            self.color = self.color_active if self.active else self.color_inactive
+            if self.rect.collidepoint(event.pos):
+                self.active = True
+                self.color = self.color_active
+                scrollbar_rect = self._get_scrollbar_rect()
+                if scrollbar_rect and scrollbar_rect.collidepoint(event.pos):
+                    self.dragging_scrollbar = True
+            else:
+                self.active = False
+                self.color = self.color_inactive
+
+        if event.type == pygame.MOUSEBUTTONUP and event.button == 1:
+            self.dragging_scrollbar = False
+
+        if event.type == pygame.MOUSEMOTION and self.dragging_scrollbar:
+            mouse_y = event.pos[1]
+            thumb_rect = self._get_thumb_rect()
+            if thumb_rect:
+                content_height = len(self.lines) * self.line_height
+                if content_height > self.rect.height:
+                    scrollable_height = self.rect.height - thumb_rect.height
+                    if scrollable_height > 0:
+                        ratio = (mouse_y - self.rect.y - thumb_rect.height / 2) / scrollable_height
+                        self.scroll_offset = ratio * (len(self.lines) - self.rect.height / self.line_height)
+                        self._clamp_scroll()
+
         if event.type == pygame.KEYDOWN and self.active:
             if event.key == pygame.K_BACKSPACE:
                 if self.lines[-1]:
@@ -79,14 +104,17 @@ class TextInputBox:
 
         if event.type == pygame.MOUSEWHEEL and self.active:
             self.scroll_offset -= event.y
-            max_scroll = max(0, len(self.lines) - int(self.rect.height / self.line_height))
-            if self.scroll_offset < 0:
-                self.scroll_offset = 0
-            if self.scroll_offset > max_scroll:
-                self.scroll_offset = max_scroll
+            self._clamp_scroll()
+
+    def _clamp_scroll(self):
+        max_scroll = max(0, len(self.lines) - int(self.rect.height / self.line_height))
+        if self.scroll_offset < 0:
+            self.scroll_offset = 0
+        if self.scroll_offset > max_scroll:
+            self.scroll_offset = max_scroll
 
     def _wrap_text(self):
-        max_width = self.rect.width - 10
+        max_width = self.rect.width - 10 - self.scrollbar_width
         while self.font.size(self.lines[-1])[0] > max_width:
             line = self.lines[-1]
             split_pos = -1
@@ -102,6 +130,19 @@ class TextInputBox:
                 self.lines.append(self.lines[-1][-1])
                 self.lines[-2] = self.lines[-2][:-1]
 
+    def _get_scrollbar_rect(self):
+        return pygame.Rect(self.rect.right - self.scrollbar_width, self.rect.y, self.scrollbar_width, self.rect.height)
+
+    def _get_thumb_rect(self):
+        content_height = len(self.lines) * self.line_height
+        if content_height > self.rect.height:
+            thumb_height = self.rect.height * (self.rect.height / content_height)
+            scrollable_range = content_height - self.rect.height
+            if scrollable_range > 0:
+                thumb_y = self.rect.y + (self.scroll_offset * self.line_height) * (self.rect.height - thumb_height) / scrollable_range
+                return pygame.Rect(self.rect.right - self.scrollbar_width, thumb_y, self.scrollbar_width, thumb_height)
+        return None
+
     def draw(self, screen):
         pygame.draw.rect(screen, (255, 255, 255), self.rect)
         pygame.draw.rect(screen, self.color, self.rect, 2)
@@ -111,15 +152,19 @@ class TextInputBox:
             screen.blit(placeholder_surface, (self.rect.x + 5, self.rect.y + 5))
             return
 
-        y = self.rect.y + 5
-        for i, line in enumerate(self.lines):
-            if i < self.scroll_offset:
-                continue
-            if y + self.line_height > self.rect.bottom:
-                break
-            text_surface = self.font.render(line, True, (0, 0, 0))
-            screen.blit(text_surface, (self.rect.x + 5, y))
+        y = self.rect.y + 5 - self.scroll_offset * self.line_height
+        for line in self.lines:
+            if y + self.line_height > self.rect.y and y < self.rect.bottom:
+                text_surface = self.font.render(line, True, (0, 0, 0))
+                screen.blit(text_surface, (self.rect.x + 5, y))
             y += self.line_height
+
+        scrollbar_rect = self._get_scrollbar_rect()
+        if scrollbar_rect:
+            pygame.draw.rect(screen, (230, 230, 230), scrollbar_rect)
+            thumb_rect = self._get_thumb_rect()
+            if thumb_rect:
+                pygame.draw.rect(screen, (180, 180, 180), thumb_rect)
 
 
 # --- Main UI Views ---
@@ -243,6 +288,8 @@ class ChatGUI:
             "Please select who you would want to talk to...",
         ]
         self.chat_scroll_offset = 0
+        self.chat_scrollbar_width = 15
+        self.dragging_chat_scrollbar = False
         input_box_x = 1560 - 40 - 500
         input_box_y = 40
         input_box_width = 500
@@ -271,17 +318,71 @@ class ChatGUI:
         self.main_input_box.handle_event(event)
         for toggle in self.toggle_switches:
             toggle.handle_event(event)
+
+        if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+            chat_scrollbar_rect = self._get_chat_scrollbar_rect()
+            if chat_scrollbar_rect and chat_scrollbar_rect.collidepoint(event.pos):
+                self.dragging_chat_scrollbar = True
+
+        if event.type == pygame.MOUSEBUTTONUP and event.button == 1:
+            self.dragging_chat_scrollbar = False
+
+        if event.type == pygame.MOUSEMOTION and self.dragging_chat_scrollbar:
+            mouse_y = event.pos[1]
+            thumb_rect = self._get_chat_thumb_rect()
+            if thumb_rect:
+                content_height = self._get_chat_content_height()
+                if content_height > self.dialogue_box_rect.height:
+                    scrollable_height = self.dialogue_box_rect.height - thumb_rect.height
+                    ratio = (mouse_y - self.dialogue_box_rect.y - thumb_rect.height / 2) / scrollable_height
+                    self.chat_scroll_offset = ratio * (content_height - self.dialogue_box_rect.height)
+                    self._clamp_chat_scroll()
+
         if event.type == pygame.MOUSEWHEEL:
-            self.chat_scroll_offset += event.y * 10
+            self.chat_scroll_offset -= event.y * 10
+            self._clamp_chat_scroll()
+
+    def _clamp_chat_scroll(self):
+        content_height = self._get_chat_content_height()
+        max_scroll = max(0, content_height - self.dialogue_box_rect.height)
+        if self.chat_scroll_offset < 0:
+            self.chat_scroll_offset = 0
+        if self.chat_scroll_offset > max_scroll:
+            self.chat_scroll_offset = max_scroll
+
+    def _get_chat_content_height(self):
+        if not self.chat_history:
+            return 0
+        return render_wrapped_text(self.chat_history[-1], self.font, (0,0,0), self.dialogue_box_rect, self.screen, get_height=True)
+
+    def _get_chat_scrollbar_rect(self):
+        return pygame.Rect(self.dialogue_box_rect.right - self.chat_scrollbar_width, self.dialogue_box_rect.y, self.chat_scrollbar_width, self.dialogue_box_rect.height)
+
+    def _get_chat_thumb_rect(self):
+        content_height = self._get_chat_content_height()
+        if content_height > self.dialogue_box_rect.height:
+            thumb_height = self.dialogue_box_rect.height * (self.dialogue_box_rect.height / content_height)
+            scrollable_range = content_height - self.dialogue_box_rect.height
+            if scrollable_range > 0:
+                thumb_y = self.dialogue_box_rect.y + self.chat_scroll_offset * (self.dialogue_box_rect.height - thumb_height) / scrollable_range
+                return pygame.Rect(self.dialogue_box_rect.right - self.chat_scrollbar_width, thumb_y, self.chat_scrollbar_width, thumb_height)
+        return None
 
     def draw(self, screen):
         screen.blit(self.background_image, (0, 0))
         screen.blit(self.dialogue_box_image, (self.screen_width * 0.1, 675))
 
+        chat_scrollbar_rect = self._get_chat_scrollbar_rect()
+        if chat_scrollbar_rect:
+            pygame.draw.rect(screen, (230, 230, 230), chat_scrollbar_rect)
+            thumb_rect = self._get_chat_thumb_rect()
+            if thumb_rect:
+                pygame.draw.rect(screen, (180, 180, 180), thumb_rect)
+
         if self.chat_history:
             # Display the last message from the history
             last_message = self.chat_history[-1]
-            self.chat_scroll_offset = render_wrapped_text(
+            render_wrapped_text(
                 last_message,
                 self.font,
                 (0, 0, 0),
@@ -313,7 +414,7 @@ class ChatGUI:
 # --- Utility Functions ---
 
 
-def render_wrapped_text(text, font, color, rect, surface, scroll_offset=0):
+def render_wrapped_text(text, font, color, rect, surface, scroll_offset=0, get_height=False):
     padding = 10
     x, y = rect.x + padding, rect.y + padding - scroll_offset
     max_width = rect.width - 2 * padding
@@ -332,6 +433,9 @@ def render_wrapped_text(text, font, color, rect, surface, scroll_offset=0):
                 total_height += line_height
                 line = word
         total_height += line_height
+
+    if get_height:
+        return total_height
 
     if scroll_offset < 0:
         scroll_offset = 0
