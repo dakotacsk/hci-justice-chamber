@@ -170,19 +170,19 @@ class ChatGUI:
         # Sprites
         self.sprites = {
             "Dr. Sam Iqbal": pygame.transform.scale(
-                pygame.image.load("resources/sprites/utilitarian.jpg").convert_alpha(),
+                pygame.image.load("resources/sprites/utilitarian.png").convert_alpha(),
                 (60, 100),
             ),
             "Amara Ndlovu": pygame.transform.scale(
-                pygame.image.load("resources/sprites/restorative.jpg").convert_alpha(),
+                pygame.image.load("resources/sprites/restorative.png").convert_alpha(),
                 (60, 100),
             ),
             "Jamie Reyes": pygame.transform.scale(
-                pygame.image.load("resources/sprites/meritocracy.jpg").convert_alpha(),
+                pygame.image.load("resources/sprites/meritocracy.png").convert_alpha(),
                 (60, 100),
             ),
             "Jordan Chex": pygame.transform.scale(
-                pygame.image.load("resources/sprites/rawlsian.jpg").convert_alpha(),
+                pygame.image.load("resources/sprites/rawlsian.png").convert_alpha(),
                 (60, 100),
             ),
         }
