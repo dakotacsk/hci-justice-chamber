@@ -56,6 +56,9 @@ class TextInputBox:
         self.color_active = pygame.Color("dodgerblue2")
         self.color_inactive = pygame.Color("lightgray")
         self.color = self.color_inactive
+        self.lines = [""]
+        self.scroll_offset = 0
+        self.line_height = font.get_linesize()
 
     def handle_event(self, event):
         if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
@@ -63,19 +66,60 @@ class TextInputBox:
             self.color = self.color_active if self.active else self.color_inactive
         if event.type == pygame.KEYDOWN and self.active:
             if event.key == pygame.K_BACKSPACE:
-                self.text = self.text[:-1]
+                if self.lines[-1]:
+                    self.lines[-1] = self.lines[-1][:-1]
+                elif len(self.lines) > 1:
+                    self.lines.pop()
+            elif event.key == pygame.K_RETURN:
+                self.lines.append("")
             else:
-                self.text += event.unicode
+                self.lines[-1] += event.unicode
+                self._wrap_text()
+            self.text = "\n".join(self.lines)
+
+        if event.type == pygame.MOUSEWHEEL and self.active:
+            self.scroll_offset -= event.y
+            max_scroll = max(0, len(self.lines) - int(self.rect.height / self.line_height))
+            if self.scroll_offset < 0:
+                self.scroll_offset = 0
+            if self.scroll_offset > max_scroll:
+                self.scroll_offset = max_scroll
+
+    def _wrap_text(self):
+        max_width = self.rect.width - 10
+        while self.font.size(self.lines[-1])[0] > max_width:
+            line = self.lines[-1]
+            split_pos = -1
+            for i in range(len(line) - 1, 0, -1):
+                if line[i] == ' ':
+                    split_pos = i
+                    break
+            if split_pos != -1:
+                self.lines[-1] = line[:split_pos]
+                self.lines.append(line[split_pos+1:])
+            else:
+                # No space found, just break the line
+                self.lines.append(self.lines[-1][-1])
+                self.lines[-2] = self.lines[-2][:-1]
 
     def draw(self, screen):
         pygame.draw.rect(screen, (255, 255, 255), self.rect)
         pygame.draw.rect(screen, self.color, self.rect, 2)
-        if self.text:
-            text_surface = self.font.render(self.text, True, (0, 0, 0))
-            screen.blit(text_surface, (self.rect.x + 5, self.rect.y + 5))
-        else:
+
+        if not self.text and self.placeholder:
             placeholder_surface = self.font.render(self.placeholder, True, (150, 150, 150))
             screen.blit(placeholder_surface, (self.rect.x + 5, self.rect.y + 5))
+            return
+
+        y = self.rect.y + 5
+        for i, line in enumerate(self.lines):
+            if i < self.scroll_offset:
+                continue
+            if y + self.line_height > self.rect.bottom:
+                break
+            text_surface = self.font.render(line, True, (0, 0, 0))
+            screen.blit(text_surface, (self.rect.x + 5, y))
+            y += self.line_height
 
 
 # --- Main UI Views ---
@@ -198,6 +242,7 @@ class ChatGUI:
         self.chat_history = [
             "Please select who you would want to talk to...",
         ]
+        self.chat_scroll_offset = 0
         input_box_x = 1560 - 40 - 500
         input_box_y = 40
         input_box_width = 500
@@ -226,6 +271,8 @@ class ChatGUI:
         self.main_input_box.handle_event(event)
         for toggle in self.toggle_switches:
             toggle.handle_event(event)
+        if event.type == pygame.MOUSEWHEEL:
+            self.chat_scroll_offset += event.y * 10
 
     def draw(self, screen):
         screen.blit(self.background_image, (0, 0))
@@ -234,12 +281,13 @@ class ChatGUI:
         if self.chat_history:
             # Display the last message from the history
             last_message = self.chat_history[-1]
-            render_wrapped_text(
+            self.chat_scroll_offset = render_wrapped_text(
                 last_message,
                 self.font,
                 (0, 0, 0),
                 self.dialogue_box_rect,
                 screen,
+                self.chat_scroll_offset,
             )
 
         self.main_input_box.draw(screen)
@@ -265,12 +313,32 @@ class ChatGUI:
 # --- Utility Functions ---
 
 
-def render_wrapped_text(text, font, color, rect, surface):
+def render_wrapped_text(text, font, color, rect, surface, scroll_offset=0):
     padding = 10
-    x, y = rect.x + padding, rect.y + padding
+    x, y = rect.x + padding, rect.y + padding - scroll_offset
     max_width = rect.width - 2 * padding
     line_height = font.get_linesize()
     paragraphs = text.split("\n")
+
+    total_height = 0
+    for para in paragraphs:
+        words = para.split(" ")
+        line = ""
+        for word in words:
+            candidate = f"{line} {word}".strip()
+            if font.size(candidate)[0] <= max_width:
+                line = candidate
+            else:
+                total_height += line_height
+                line = word
+        total_height += line_height
+
+    if scroll_offset < 0:
+        scroll_offset = 0
+    if total_height > rect.height and scroll_offset > total_height - rect.height:
+        scroll_offset = total_height - rect.height
+
+    y = rect.y + padding - scroll_offset
 
     for para in paragraphs:
         words = para.split(" ")
@@ -281,12 +349,15 @@ def render_wrapped_text(text, font, color, rect, surface):
                 line = candidate
             else:
                 if y + line_height > rect.bottom - padding:
-                    return
-                surface.blit(font.render(line, True, color), (x, y))
+                    return scroll_offset
+                if y + line_height > rect.top + padding:
+                    surface.blit(font.render(line, True, color), (x, y))
                 y += line_height
                 line = word
         if line:
             if y + line_height > rect.bottom - padding:
-                return
-            surface.blit(font.render(line, True, color), (x, y))
+                return scroll_offset
+            if y + line_height > rect.top + padding:
+                surface.blit(font.render(line, True, color), (x, y))
             y += line_height
+    return scroll_offset
