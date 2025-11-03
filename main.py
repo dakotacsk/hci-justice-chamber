@@ -135,10 +135,13 @@ def main():
                     # Randomize the order of agents for responding
                     random.shuffle(active_agents)
 
+                    first_response_index = len(chat_gui.chat_history)
                     for agent in active_agents:
                         reply = agent.generate_response(session_id, max_tokens=args.max_tokens)
                         chat_gui.chat_history.append(f"{agent.profile.name}: {reply}")
                         print(f"{agent.profile.name}: {reply}")
+                    
+                    chat_gui.current_chat_index = first_response_index
             
             chat_gui.draw(screen)
 

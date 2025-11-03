@@ -287,6 +287,7 @@ class ChatGUI:
         self.chat_history = [
             "Please select who you would want to talk to...",
         ]
+        self.current_chat_index = 0
         self.chat_scroll_offset = 0
         self.chat_scrollbar_width = int(15 * 0.8)
         self.dragging_chat_scrollbar = False
@@ -304,6 +305,8 @@ class ChatGUI:
         self.create_advocate_button = Button(
             self.screen_width - int(220 * 0.8), self.screen_height - int(60 * 0.8), int(200 * 0.8), int(40 * 0.8), "Create Advocate"
         )
+        self.prev_button = Button(self.dialogue_box_rect.x - int(60 * 0.8), self.dialogue_box_rect.centery - int(20 * 0.8), int(50 * 0.8), int(40 * 0.8), "<")
+        self.next_button = Button(self.dialogue_box_rect.right + int(10 * 0.8), self.dialogue_box_rect.centery - int(20 * 0.8), int(50 * 0.8), int(40 * 0.8), ">")
         self.toggle_switches = self._create_toggle_switches()
 
     def _create_toggle_switches(self):
@@ -318,6 +321,17 @@ class ChatGUI:
         self.main_input_box.handle_event(event)
         for toggle in self.toggle_switches:
             toggle.handle_event(event)
+
+        if self.prev_button.is_clicked(event):
+            if self.current_chat_index > 0:
+                self.current_chat_index -= 1
+                while self.current_chat_index > 0 and self.chat_history[self.current_chat_index].startswith("You:"):
+                    self.current_chat_index -= 1
+        if self.next_button.is_clicked(event):
+            if self.current_chat_index < len(self.chat_history) - 1:
+                self.current_chat_index += 1
+                while self.current_chat_index < len(self.chat_history) - 1 and self.chat_history[self.current_chat_index].startswith("You:"):
+                    self.current_chat_index += 1
 
         if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
             chat_scrollbar_rect = self._get_chat_scrollbar_rect()
@@ -353,7 +367,7 @@ class ChatGUI:
     def _get_chat_content_height(self):
         if not self.chat_history:
             return 0
-        return render_wrapped_text(self.chat_history[-1], self.font, (0,0,0), self.dialogue_box_rect, self.screen, get_height=True)
+        return render_wrapped_text(self.chat_history[self.current_chat_index], self.font, (0,0,0), self.dialogue_box_rect, self.screen, get_height=True)
 
     def _get_chat_scrollbar_rect(self):
         return pygame.Rect(self.dialogue_box_rect.right - self.chat_scrollbar_width, self.dialogue_box_rect.y, self.chat_scrollbar_width, self.dialogue_box_rect.height)
@@ -380,16 +394,19 @@ class ChatGUI:
                 pygame.draw.rect(screen, (180, 180, 180), thumb_rect)
 
         if self.chat_history:
-            # Display the last message from the history
-            last_message = self.chat_history[-1]
+            # Display the current message from the history
+            message = self.chat_history[self.current_chat_index]
             render_wrapped_text(
-                last_message,
+                message,
                 self.font,
                 (0, 0, 0),
                 self.dialogue_box_rect,
                 screen,
                 self.chat_scroll_offset,
             )
+
+        self.prev_button.draw(screen)
+        self.next_button.draw(screen)
 
         self.main_input_box.draw(screen)
         self.submit_button.draw(screen)
