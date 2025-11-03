@@ -5,13 +5,14 @@ import sys
 import uuid
 import pygame
 import csv
+import random
 from agent import JusticeAgent
 from config import AGENTS, AgentProfile
 from gui import ChatGUI, CreationForm
 
 CSV_FILE = "advocates.csv"
 
-# --- ADVOCATE DATA HANDLING ---
+# ADVOCATE DATA HANDLING
 
 def build_system_prompt(answers: dict) -> str:
     """Constructs a coherent system prompt from user answers."""
@@ -64,7 +65,7 @@ def load_latest_advocate() -> AgentProfile | None:
             system_prompt=latest_advocate_data['system_prompt']
         )
 
-# --- MAIN APPLICATION ---
+# MAIN APPLICATION
 
 def main():
     import argparse
@@ -98,7 +99,7 @@ def main():
     chat_gui = ChatGUI(agents, SCREEN_WIDTH, SCREEN_HEIGHT)
     creation_form = CreationForm(SCREEN_WIDTH, SCREEN_HEIGHT)
 
-    # --- Main Loop ---
+    # Main Loop
     running = True
     while running:
         events = pygame.event.get()
@@ -107,43 +108,42 @@ def main():
                 running = False
 
         if app_state == "CHAT":
-            # --- CHAT STATE LOGIC ---
+            # CHAT STATE LOGIC
             for event in events:
                 chat_gui.handle_event(event)
                 if chat_gui.create_advocate_button.is_clicked(event):
                     app_state = "CREATION"
                     break
-                if event.type == pygame.KEYDOWN and chat_gui.main_input_box.active:
-                    if event.key == pygame.K_RETURN:
-                        user_input = chat_gui.main_input_box.text
-                        if not user_input: continue
-                        
-                        chat_gui.main_input_box.text = ""
-                        chat_gui.chat_history.append(f"You: {user_input}")
+                if chat_gui.submit_button.is_clicked(event):
+                    user_input = chat_gui.main_input_box.text
+                    if not user_input: continue
+                    
+                    chat_gui.main_input_box.text = ""
+                    chat_gui.chat_history.append(f"You: {user_input}")
+                    print(f"\nYou: {user_input}")
 
-                        active_agents = [agent for agent, toggle in zip(chat_gui.agents.values(), chat_gui.toggle_switches) if toggle.is_on]
-                        if not active_agents:
-                            chat_gui.chat_history.append("No agents are active.")
-                            continue
+                    active_agents = [agent for agent, toggle in zip(chat_gui.agents.values(), chat_gui.toggle_switches) if toggle.is_on]
+                    if not active_agents:
+                        chat_gui.chat_history.append("No agents are active.")
+                        print("No agents are active.")
+                        continue
 
-                        session_id = str(uuid.uuid4())
-                        for agent in active_agents:
-                            agent.memory.add(session_id, "User", "user", user_input)
+                    session_id = str(uuid.uuid4())
+                    for agent in active_agents:
+                        agent.memory.add(session_id, "User", "user", user_input)
 
-                        custom_agent = agents.get("custom")
-                        if custom_agent and custom_agent in active_agents:
-                            reply = custom_agent.generate_response(session_id, max_tokens=args.max_tokens)
-                            chat_gui.chat_history.append(f"{custom_agent.profile.name}: {reply}")
+                    # Randomize the order of agents for responding
+                    random.shuffle(active_agents)
 
-                        for agent in active_agents:
-                            if not custom_agent or agent.profile.name != custom_agent.profile.name:
-                                cross_reply = agent.generate_response(session_id, max_tokens=args.max_tokens)
-                                chat_gui.chat_history.append(f"{agent.profile.name}: {cross_reply}")
+                    for agent in active_agents:
+                        reply = agent.generate_response(session_id, max_tokens=args.max_tokens)
+                        chat_gui.chat_history.append(f"{agent.profile.name}: {reply}")
+                        print(f"{agent.profile.name}: {reply}")
             
             chat_gui.draw(screen)
 
         elif app_state == "CREATION":
-            # --- CREATION STATE LOGIC ---
+            # CREATION STATE LOGIC
             for event in events:
                 new_advocate_data = creation_form.handle_event(event)
                 if new_advocate_data:
@@ -166,7 +166,7 @@ def main():
 
         pygame.display.flip()
 
-    # --- Shutdown ---
+    # Shutdown
     if agents:
         # Clear the database on exit
         any_agent = next(iter(agents.values()))

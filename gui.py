@@ -149,11 +149,6 @@ class CreationForm:
 
 class ChatGUI:
     def __init__(self, agents, screen_width, screen_height):
-        # multiple lines test
-        self.start_time = None
-        self.talking = True
-        self.chat_count = 0
-
         self.screen_width = screen_width
         self.screen_height = screen_height
         self.screen = pygame.display.set_mode((self.screen_width, self.screen_height))
@@ -200,8 +195,16 @@ class ChatGUI:
             "LOLOLOLOL",
             "BYEEEEEE",
         ]
+        input_box_x = 1560 - 40 - 500
+        input_box_y = 40
+        input_box_width = 500
+        input_box_height = int(self.screen_height * 0.2)
+        
         self.main_input_box = TextInputBox(
-            1560 - 40 - 500, 40, 500, int(self.screen_height * 0.2), self.font
+            input_box_x, input_box_y, input_box_width, input_box_height, self.font
+        )
+        self.submit_button = Button(
+            input_box_x + input_box_width + 10, input_box_y, 120, 40, "Submit"
         )
         self.create_advocate_button = Button(
             self.screen_width - 220, self.screen_height - 60, 200, 40, "Create Advocate"
@@ -226,17 +229,10 @@ class ChatGUI:
         screen.blit(self.dialogue_box_image, (self.screen_width * 0.1, 675))
 
         if self.chat_history:
-            print(len(self.chat_history))
-            if self.start_time is None and len(self.chat_history) - 1 > self.chat_count:
-                self.start_time = time.time()
-            if self.start_time and self.start_time + 5 < time.time():
-                self.chat_count = self.chat_count + 1
-                if len(self.chat_history) - 1 > self.chat_count:
-                    self.start_time = time.time()
-                else:
-                    self.start_time = None
+            # Display the last message from the history
+            last_message = self.chat_history[-1]
             render_wrapped_text(
-                self.chat_history[self.chat_count],
+                last_message,
                 self.font,
                 (0, 0, 0),
                 self.dialogue_box_rect,
@@ -244,6 +240,7 @@ class ChatGUI:
             )
 
         self.main_input_box.draw(screen)
+        self.submit_button.draw(screen)
         self.create_advocate_button.draw(screen)
         for toggle in self.toggle_switches:
             toggle.draw(screen)
