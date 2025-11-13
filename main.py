@@ -122,7 +122,7 @@ def main():
                     chat_gui.chat_history.append(f"You: {user_input}")
                     print(f"\nYou: {user_input}")
 
-                    active_agents = [agent for agent, toggle in zip(chat_gui.agents.values(), chat_gui.toggle_switches) if toggle.is_on]
+                    active_agents = [agent for agent, checkbox in zip(chat_gui.agents.values(), chat_gui.checkboxes) if checkbox.is_on]
                     if not active_agents:
                         chat_gui.chat_history.append("No agents are active.")
                         print("No agents are active.")
