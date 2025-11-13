@@ -6,6 +6,7 @@ import uuid
 import pygame
 import csv
 import random
+import time
 from agent import JusticeAgent
 from config import AGENTS, AgentProfile
 from gui import ChatGUI, CreationForm
@@ -67,11 +68,9 @@ def load_latest_advocate() -> AgentProfile | None:
 
 # MAIN APPLICATION
 
+import concurrent.futures
+
 def main():
-    import argparse
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--max_tokens", type=int, default=100, help="Maximum number of tokens for agent responses.")
-    args = parser.parse_args()
 
     pygame.init()
     pygame.key.set_repeat(300, 30)
@@ -135,13 +134,18 @@ def main():
                     # Randomize the order of agents for responding
                     random.shuffle(active_agents)
 
-                    first_response_index = len(chat_gui.chat_history)
-                    for agent in active_agents:
-                        reply = agent.generate_response(session_id, max_tokens=args.max_tokens)
-                        chat_gui.chat_history.append(f"{agent.profile.name}: {reply}")
-                        print(f"{agent.profile.name}: {reply}")
+                    with concurrent.futures.ThreadPoolExecutor() as executor:
+                        futures = {executor.submit(agent.generate_response, session_id): agent for agent in active_agents}
+                        for future in concurrent.futures.as_completed(futures):
+                            agent = futures[future]
+                            try:
+                                reply = future.result()
+                                chat_gui.chat_history.append(f"{agent.profile.name}: {reply}")
+                                print(f"{agent.profile.name}: {reply}")
+                            except Exception as exc:
+                                print(f'{agent.profile.name} generated an exception: {exc}')
                     
-                    chat_gui.current_chat_index = first_response_index
+                    chat_gui.current_chat_index = len(chat_gui.chat_history) - len(active_agents)
             
             chat_gui.draw(screen)
 

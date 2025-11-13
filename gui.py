@@ -267,12 +267,6 @@ class ChatGUI:
         self.background_image = pygame.transform.scale(
             self.background_image, (self.screen_width, self.screen_height)
         )
-        self.dialogue_box_image = pygame.image.load(
-            "resources/dialogue_box.jpg"
-        ).convert_alpha()
-        self.dialogue_box_image = pygame.transform.scale(
-            self.dialogue_box_image, (self.screen_width * 0.8, int(150 * 0.8))
-        )
         self.dialogue_box_rect = pygame.Rect(int(300 * 0.8), int(700 * 0.8), int(1080 * 0.8), int(125 * 0.8))
 
         # Sprites
@@ -400,26 +394,28 @@ class ChatGUI:
 
     def draw(self, screen):
         screen.blit(self.background_image, (0, 0))
-        screen.blit(self.dialogue_box_image, (self.screen_width * 0.1, int(675 * 0.8)))
-
-        chat_scrollbar_rect = self._get_chat_scrollbar_rect()
-        if chat_scrollbar_rect:
-            pygame.draw.rect(screen, (230, 230, 230), chat_scrollbar_rect)
-            thumb_rect = self._get_chat_thumb_rect()
-            if thumb_rect:
-                pygame.draw.rect(screen, (180, 180, 180), thumb_rect)
 
         if self.chat_history:
             # Display the current message from the history
             message = self.chat_history[self.current_chat_index]
-            render_wrapped_text(
-                message,
-                self.font,
-                (0, 0, 0),
-                self.dialogue_box_rect,
-                screen,
-                self.chat_scroll_offset,
-            )
+            
+            # Define bubble properties
+            bubble_rect = self.dialogue_box_rect
+            bubble_color = (255, 255, 255)
+            text_color = (0, 0, 0)
+            
+            # Determine tail position based on who is speaking
+            if message.startswith("You:"):
+                tail_pos = (bubble_rect.right - 20, bubble_rect.bottom)
+            else:
+                agent_name = message.split(":")[0]
+                if agent_name in self.sprites:
+                    sprite_pos = self._get_sprite_pos(agent_name)
+                    tail_pos = (sprite_pos[0] + 30, bubble_rect.top)
+                else:
+                    tail_pos = (bubble_rect.left + 20, bubble_rect.top)
+
+            draw_speech_bubble(screen, message, self.font, text_color, bubble_color, bubble_rect, tail_pos)
 
         self.prev_button.draw(screen)
         self.next_button.draw(screen)
@@ -434,20 +430,34 @@ class ChatGUI:
 
         self._draw_sprites(screen)
 
-    def _draw_sprites(self, screen):
+    def _get_sprite_pos(self, agent_name):
         sprite_positions = {
             "Dr. Sam Iqbal": (int(760 * 0.8), int(530 * 0.8)),
             "Amara Ndlovu": (int(860 * 0.8), int(415 * 0.8)),
             "Jamie Reyes": (int(650 * 0.8), int(415 * 0.8)),
             "Jordan Chex": (int(760 * 0.8), int(305 * 0.8)),
         }
+        return sprite_positions.get(agent_name)
+
+    def _draw_sprites(self, screen):
         for checkbox in self.checkboxes:
             if checkbox.is_on and checkbox.label in self.sprites:
-                screen.blit(self.sprites[checkbox.label], sprite_positions[checkbox.label])
+                sprite_pos = self._get_sprite_pos(checkbox.label)
+                if sprite_pos:
+                    screen.blit(self.sprites[checkbox.label], sprite_pos)
 
 
 # --- Utility Functions ---
 
+
+def draw_speech_bubble(surface, text, font, text_color, bubble_color, rect, tail_pos):
+    # Draw the bubble
+    pygame.draw.rect(surface, bubble_color, rect, border_radius=10)
+    
+    # Draw the tail
+    pygame.draw.polygon(surface, bubble_color, [tail_pos, (tail_pos[0] - 10, tail_pos[1] + 10), (tail_pos[0] + 10, tail_pos[1] + 10)])
+
+    render_wrapped_text(text, font, text_color, rect, surface)
 
 def render_wrapped_text(text, font, color, rect, surface, scroll_offset=0, get_height=False):
     padding = 10

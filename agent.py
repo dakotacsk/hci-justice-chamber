@@ -33,8 +33,8 @@ class JusticeAgent:
         """Builds a structured history for the LLM prompt."""
         history = self.memory.get_recent(session_id)
         
-        # Limit history to the last 12 turns
-        recent_history = history[-12:]
+        # Limit history to the last 2 turns
+        recent_history = history[-2:]
         
         # Format for Gemini/OpenAI API
         formatted_history = []
@@ -79,7 +79,10 @@ class JusticeAgent:
                     gemini_history,
                     generation_config=generation_config
                 )
-                reply = response.text.strip()
+                if response.candidates:
+                    reply = response.text.strip()
+                else:
+                    reply = f"({self.profile.name} has no response.)"
             else:
                  reply = f"({self.profile.name} has no configured LLM.)"
 
