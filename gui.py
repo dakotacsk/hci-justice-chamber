@@ -9,7 +9,7 @@ class Button:
         self.rect = pygame.Rect(x, y, width, height)
         self.label = label
         self.color = color
-        self.font = pygame.font.Font(None, int(24 * 0.8))
+        self.font = pygame.font.Font("resources/roboto_fonts/Roboto-Bold.ttf", int(24 * 0.8))
 
     def draw(self, screen):
         pygame.draw.rect(screen, self.color, self.rect, border_radius=5)
@@ -24,19 +24,19 @@ class Button:
         return False
 
 
-class ToggleSwitch:
+class CheckBox:
     def __init__(self, x, y, width, height, label, is_on=False):
         self.rect = pygame.Rect(x, y, width, height)
         self.label = label
         self.is_on = is_on
-        self.font = pygame.font.Font(None, int(24 * 0.8))
+        self.font = pygame.font.Font("resources/roboto_fonts/Roboto-Regular.ttf", int(24 * 0.8))
 
     def draw(self, screen):
-        color = (34, 139, 34) if self.is_on else (178, 34, 34)
-        pygame.draw.rect(screen, color, self.rect, border_radius=5)
-        label_surface = self.font.render(self.label, True, (255, 255, 255))
-        text_rect = label_surface.get_rect(center=self.rect.center)
-        screen.blit(label_surface, text_rect)
+        pygame.draw.rect(screen, (0, 0, 0), self.rect, 2)
+        if self.is_on:
+            pygame.draw.rect(screen, (0, 0, 0), (self.rect.x + 3, self.rect.y + 3, self.rect.width - 6, self.rect.height - 6))
+        label_surface = self.font.render(self.label, True, (0, 0, 0))
+        screen.blit(label_surface, (self.rect.x + self.rect.width + 10, self.rect.y))
 
     def handle_event(self, event):
         if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
@@ -176,9 +176,9 @@ class TextInputBox:
 
 class CreationForm:
     def __init__(self, screen_width, screen_height):
-        self.font_title = pygame.font.Font(None, int(48 * 0.8))
-        self.font_label = pygame.font.Font(None, int(32 * 0.8))
-        self.font_input = pygame.font.Font(None, int(28 * 0.8))
+        self.font_title = pygame.font.Font("resources/roboto_fonts/Roboto-Bold.ttf", int(48 * 0.8))
+        self.font_label = pygame.font.Font("resources/roboto_fonts/Roboto-Regular.ttf", int(32 * 0.8))
+        self.font_input = pygame.font.Font("resources/roboto_fonts/Roboto-Regular.ttf", int(28 * 0.8))
         self.width = screen_width
         self.height = screen_height
 
@@ -296,7 +296,7 @@ class ChatGUI:
         }
 
         # State & UI
-        self.font = pygame.font.Font(None, int(24 * 0.8))
+        self.font = pygame.font.Font("resources/roboto_fonts/Roboto-Regular.ttf", int(24 * 0.8))
         self.agents = agents
         self.chat_history = [
             "Please select who you would want to talk to...",
@@ -311,7 +311,7 @@ class ChatGUI:
         input_box_height = int(self.screen_height * 0.2)
         
         self.main_input_box = TextInputBox(
-            input_box_x, input_box_y, input_box_width, input_box_height, self.font, placeholder="(type here...)"
+            input_box_x, input_box_y, input_box_width, input_box_height, pygame.font.Font("resources/roboto_fonts/Roboto-Regular.ttf", int(24 * 0.8)), placeholder="(ask a question or tell a story about justice...)"
         )
         self.submit_button = Button(
             input_box_x + input_box_width - int(120 * 0.8), input_box_y + input_box_height + int(10 * 0.8), int(120 * 0.8), int(40 * 0.8), "Submit"
@@ -321,20 +321,22 @@ class ChatGUI:
         )
         self.prev_button = Button(self.dialogue_box_rect.x - int(60 * 0.8), self.dialogue_box_rect.centery - int(20 * 0.8), int(50 * 0.8), int(40 * 0.8), "<")
         self.next_button = Button(self.dialogue_box_rect.right + int(10 * 0.8), self.dialogue_box_rect.centery - int(20 * 0.8), int(50 * 0.8), int(40 * 0.8), ">")
-        self.toggle_switches = self._create_toggle_switches()
+        self.checkboxes = self._create_checkboxes()
+        self.checkbox_label = pygame.font.Font("resources/roboto_fonts/Roboto-Regular.ttf", int(24 * 0.8)).render("Select the character(s) you would like to talk to:", True, (0, 0, 0))
 
-    def _create_toggle_switches(self):
-        toggles = []
-        x, y = int(40 * 0.8), int(40 * 0.8)
+
+    def _create_checkboxes(self):
+        checkboxes = []
+        x, y = int(40 * 0.8), int(80 * 0.8)
         for agent in self.agents.values():
-            toggles.append(ToggleSwitch(x, y, int(150 * 0.8), int(30 * 0.8), agent.profile.name))
-            x += int(160 * 0.8)
-        return toggles
+            checkboxes.append(CheckBox(x, y, int(20 * 0.8), int(20 * 0.8), agent.profile.name))
+            y += int(40 * 0.8)
+        return checkboxes
 
     def handle_event(self, event):
         self.main_input_box.handle_event(event)
-        for toggle in self.toggle_switches:
-            toggle.handle_event(event)
+        for checkbox in self.checkboxes:
+            checkbox.handle_event(event)
 
         if self.prev_button.is_clicked(event):
             if self.current_chat_index > 0:
@@ -425,8 +427,10 @@ class ChatGUI:
         self.main_input_box.draw(screen)
         self.submit_button.draw(screen)
         self.create_advocate_button.draw(screen)
-        for toggle in self.toggle_switches:
-            toggle.draw(screen)
+        
+        screen.blit(self.checkbox_label, (int(40 * 0.8), int(40 * 0.8)))
+        for checkbox in self.checkboxes:
+            checkbox.draw(screen)
 
         self._draw_sprites(screen)
 
@@ -437,9 +441,9 @@ class ChatGUI:
             "Jamie Reyes": (int(650 * 0.8), int(415 * 0.8)),
             "Jordan Chex": (int(760 * 0.8), int(305 * 0.8)),
         }
-        for toggle in self.toggle_switches:
-            if toggle.is_on and toggle.label in self.sprites:
-                screen.blit(self.sprites[toggle.label], sprite_positions[toggle.label])
+        for checkbox in self.checkboxes:
+            if checkbox.is_on and checkbox.label in self.sprites:
+                screen.blit(self.sprites[checkbox.label], sprite_positions[checkbox.label])
 
 
 # --- Utility Functions ---
