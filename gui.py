@@ -143,6 +143,10 @@ class TextInputBox:
                 return pygame.Rect(self.rect.right - self.scrollbar_width, thumb_y, self.scrollbar_width, thumb_height)
         return None
 
+    def clear(self):
+        self.text = ""
+        self.lines = [""]
+
     def draw(self, screen):
         pygame.draw.rect(screen, (255, 255, 255), self.rect)
         pygame.draw.rect(screen, self.color, self.rect, 2)
@@ -213,6 +217,13 @@ class CreationForm:
             int(50 * 0.8),
             "Save Advocate",
         )
+        self.back_button = Button(
+            int(20 * 0.8),
+            int(20 * 0.8),
+            int(40 * 0.8),
+            int(40 * 0.8),
+            "<",
+        )
 
     def handle_event(self, event):
         for box in self.input_boxes:
@@ -224,6 +235,8 @@ class CreationForm:
                 "values": self.input_boxes[2].text,
                 "tone": self.input_boxes[3].text,
             }
+        if self.back_button.is_clicked(event):
+            return "back"
         return None
 
     def draw(self, screen):
@@ -239,6 +252,7 @@ class CreationForm:
             box.draw(screen)
 
         self.save_button.draw(screen)
+        self.back_button.draw(screen)
 
 
 class ChatGUI:

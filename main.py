@@ -118,7 +118,7 @@ def main():
                     user_input = chat_gui.main_input_box.text
                     if not user_input: continue
                     
-                    chat_gui.main_input_box.text = ""
+                    chat_gui.main_input_box.clear()
                     chat_gui.chat_history.append(f"You: {user_input}")
                     print(f"\nYou: {user_input}")
 
@@ -148,16 +148,20 @@ def main():
         elif app_state == "CREATION":
             # CREATION STATE LOGIC
             for event in events:
-                new_advocate_data = creation_form.handle_event(event)
-                if new_advocate_data:
+                result = creation_form.handle_event(event)
+                if result:
+                    if result == "back":
+                        app_state = "CHAT"
+                        break
+                    
                     # All fields must be filled
-                    if all(new_advocate_data.values()):
-                        system_prompt = build_system_prompt(new_advocate_data)
-                        new_advocate_data['system_prompt'] = system_prompt
-                        save_to_csv(new_advocate_data)
+                    if isinstance(result, dict) and all(result.values()):
+                        system_prompt = build_system_prompt(result)
+                        result['system_prompt'] = system_prompt
+                        save_to_csv(result)
                         
                         # Create and add the new agent
-                        new_profile = AgentProfile(name=new_advocate_data['name'], system_prompt=system_prompt)
+                        new_profile = AgentProfile(name=result['name'], system_prompt=system_prompt)
                         agents["custom"] = JusticeAgent(new_profile)
                         
                         # Re-initialize the chat GUI with the new agent list
