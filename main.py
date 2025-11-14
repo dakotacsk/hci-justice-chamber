@@ -9,7 +9,7 @@ import random
 import time
 from agent import JusticeAgent
 from config import AGENTS, AgentProfile
-from gui import ChatGUI, CreationForm
+from gui import ChatGUI, CreationForm, AdvocateSelectionScreen
 
 CSV_FILE = "advocates.csv"
 
@@ -66,6 +66,21 @@ def load_latest_advocate() -> AgentProfile | None:
             system_prompt=latest_advocate_data['system_prompt']
         )
 
+def load_all_custom_advocates() -> list[AgentProfile]:
+    """Loads all custom advocates from the CSV file."""
+    advocates = []
+    if not os.path.isfile(CSV_FILE):
+        return advocates
+    
+    with open(CSV_FILE, 'r', newline='', encoding='utf-8') as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            advocates.append(AgentProfile(
+                name=row['name'],
+                system_prompt=row['system_prompt']
+            ))
+    return advocates
+
 # MAIN APPLICATION
 
 import concurrent.futures
@@ -90,13 +105,18 @@ def main():
         sys.exit(1)
 
     agents = {key: JusticeAgent(profile) for key, profile in AGENTS.items()}
-    custom_advocate_profile = load_latest_advocate()
-    if custom_advocate_profile:
-        agents["custom"] = JusticeAgent(custom_advocate_profile)
+    all_custom_advocates = load_all_custom_advocates()
+    
+    # Add custom advocates to the agents dictionary, using their name as key
+    for advocate_profile in all_custom_advocates:
+        agents[advocate_profile.name] = JusticeAgent(advocate_profile)
+
+    selected_advocate_key = None # To store the currently selected advocate
+    chat_gui = ChatGUI(agents, SCREEN_WIDTH, SCREEN_HEIGHT, selected_advocate_key=selected_advocate_key, num_custom_advocates=len(all_custom_advocates))
+    creation_form = CreationForm(SCREEN_WIDTH, SCREEN_HEIGHT)
+    advocate_selection_screen = AdvocateSelectionScreen(SCREEN_WIDTH, SCREEN_HEIGHT, all_custom_advocates)
 
     app_state = "CHAT"
-    chat_gui = ChatGUI(agents, SCREEN_WIDTH, SCREEN_HEIGHT)
-    creation_form = CreationForm(SCREEN_WIDTH, SCREEN_HEIGHT)
 
     # Main Loop
     running = True
@@ -109,7 +129,10 @@ def main():
         if app_state == "CHAT":
             # CHAT STATE LOGIC
             for event in events:
-                chat_gui.handle_event(event)
+                result = chat_gui.handle_event(event) # Capture the result
+                if result == "select_advocate":
+                    app_state = "ADVOCATE_SELECTION"
+                    break
                 if chat_gui.create_advocate_button.is_clicked(event):
                     app_state = "CREATION"
                     break
@@ -169,11 +192,26 @@ def main():
                         agents["custom"] = JusticeAgent(new_profile)
                         
                         # Re-initialize the chat GUI with the new agent list
-                        chat_gui = ChatGUI(agents, SCREEN_WIDTH, SCREEN_HEIGHT)
+                        chat_gui = ChatGUI(agents, SCREEN_WIDTH, SCREEN_HEIGHT, selected_advocate_key=selected_advocate_key, num_custom_advocates=len(all_custom_advocates))
                         app_state = "CHAT"
                         break
             
             creation_form.draw(screen)
+
+        elif app_state == "ADVOCATE_SELECTION":
+            for event in events:
+                result = advocate_selection_screen.handle_event(event)
+                if result == "back":
+                    app_state = "CHAT"
+                    break
+                elif result: # An advocate key was returned
+                    selected_advocate_key = result
+                    print(f"Selected advocate: {selected_advocate_key}")
+                    # Re-initialize chat_gui with the newly selected advocate
+                    chat_gui = ChatGUI(agents, SCREEN_WIDTH, SCREEN_HEIGHT, selected_advocate_key=selected_advocate_key, num_custom_advocates=len(all_custom_advocates))
+                    app_state = "CHAT"
+                    break
+            advocate_selection_screen.draw(screen)
 
         pygame.display.flip()
 

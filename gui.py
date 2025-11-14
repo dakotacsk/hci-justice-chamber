@@ -255,8 +255,130 @@ class CreationForm:
         self.back_button.draw(screen)
 
 
+
+class AdvocateSelectionScreen:
+    def __init__(self, screen_width, screen_height, custom_advocates: list): # custom_advocates will be a list of AgentProfile objects
+        self.screen_width = screen_width
+        self.screen_height = screen_height
+        self.font_title = pygame.font.Font("resources/roboto_fonts/Roboto-Bold.ttf", int(48 * 0.8))
+        self.font_advocate = pygame.font.Font("resources/roboto_fonts/Roboto-Regular.ttf", int(28 * 0.8))
+
+        self.custom_advocates = custom_advocates # Store the list of custom advocates
+
+        self.advocate_images = {}
+        # Load images for default advocates (if any) and custom advocates
+        # For custom advocates, we'll need a default image or assume they have one.
+        # For now, let's assume custom advocates don't have specific images and use a placeholder or default.
+        # Or, if the custom advocate name matches one of the existing sprite keys, use that.
+        
+        # Default sprites (if needed, otherwise remove)
+        default_sprites = {
+            "meritocracy": "Jamie Reyes",
+            "rawlsian": "Jordan Chex",
+            "restorative": "Amara Ndlovu",
+            "utilitarian": "Dr. Sam Iqbal",
+        }
+        for key in default_sprites.keys():
+            self.advocate_images[key] = pygame.transform.scale(
+                pygame.image.load(f"resources/sprites/{key}.png").convert_alpha(),
+                (int(150 * 0.8), int(150 * 0.8)), # Larger size for selection
+            )
+        
+        # For custom advocates, we'll need to decide how to get their image.
+        # For now, let's assume they don't have a specific image and we'll use a generic one or just their name.
+        # If the custom advocate's name matches a default sprite key, it will use that image.
+        # Otherwise, we'll need a placeholder. Let's use 'meritocracy' as a placeholder for now.
+        self.placeholder_image = pygame.transform.scale(
+            pygame.image.load("resources/sprites/meritocracy.png").convert_alpha(),
+            (int(150 * 0.8), int(150 * 0.8)),
+        )
+
+        self.advocate_buttons = []
+        self.back_button = Button(
+            int(20 * 0.8),
+            int(20 * 0.8),
+            int(100 * 0.8),
+            int(50 * 0.8),
+            "Back",
+        )
+
+        self.scroll_offset = 0
+        self.item_height = int(200 * 0.8) # Height of each advocate item (image + text)
+        self.padding = int(20 * 0.8)
+        self._create_advocate_buttons()
+
+    def _create_advocate_buttons(self):
+        self.advocate_buttons = []
+        start_x = self.screen_width / 2 - int(200 * 0.8) # Center the buttons
+        start_y = int(150 * 0.8) # Below the title
+
+        for i, advocate_profile in enumerate(self.custom_advocates):
+            key = advocate_profile.name # Use advocate name as key
+            # Create a "button" area for each advocate
+            button_rect = pygame.Rect(
+                start_x,
+                start_y + i * (self.item_height + self.padding),
+                int(400 * 0.8),
+                self.item_height,
+            )
+            self.advocate_buttons.append({"key": key, "name": advocate_profile.name, "rect": button_rect})
+
+    def handle_event(self, event):
+        if self.back_button.is_clicked(event):
+            return "back"
+
+        if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+            for advocate_btn in self.advocate_buttons:
+                # Adjust for scroll offset when checking click
+                adjusted_rect = advocate_btn["rect"].copy()
+                adjusted_rect.y -= self.scroll_offset
+                if adjusted_rect.collidepoint(event.pos):
+                    return advocate_btn["key"]
+
+        if event.type == pygame.MOUSEWHEEL:
+            self.scroll_offset -= event.y * 10
+            self._clamp_scroll()
+        return None
+
+    def _clamp_scroll(self):
+        content_height = len(self.advocates_data) * (self.item_height + self.padding)
+        max_scroll = max(0, content_height - (self.screen_height - int(200 * 0.8))) # Max scrollable area
+        if self.scroll_offset < 0:
+            self.scroll_offset = 0
+        if self.scroll_offset > max_scroll:
+            self.scroll_offset = max_scroll
+
+    def draw(self, screen):
+        screen.fill((30, 30, 60)) # Darker blue background
+
+        title_surface = self.font_title.render("Select Your Advocate", True, (255, 255, 255))
+        screen.blit(title_surface, (self.screen_width / 2 - title_surface.get_width() / 2, int(50 * 0.8)))
+
+        # Draw advocate buttons
+        for advocate_btn in self.advocate_buttons:
+            rect = advocate_btn["rect"].copy()
+            rect.y -= self.scroll_offset
+
+            # Only draw if visible on screen
+            if rect.bottom > int(100 * 0.8) and rect.top < self.screen_height:
+                pygame.draw.rect(screen, (50, 50, 100), rect, border_radius=10) # Button background
+                pygame.draw.rect(screen, (100, 100, 200), rect, 2, border_radius=10) # Border
+
+                # Draw image
+                image = self.advocate_images.get(advocate_btn["key"], self.placeholder_image) # Use specific image or placeholder
+                image_rect = image.get_rect(center=(rect.centerx, rect.y + int(rect.height * 0.4)))
+                screen.blit(image, image_rect)
+
+                # Draw name
+                name_surface = self.font_advocate.render(advocate_btn["name"], True, (255, 255, 255))
+                name_rect = name_surface.get_rect(center=(rect.centerx, rect.y + int(rect.height * 0.8)))
+                screen.blit(name_surface, name_rect)
+
+        self.back_button.draw(screen)
+
+
 class ChatGUI:
-    def __init__(self, agents, screen_width, screen_height):
+    def __init__(self, agents, screen_width, screen_height, selected_advocate_key=None, num_custom_advocates=0):
         self.screen_width = screen_width
         self.screen_height = screen_height
         self.screen = pygame.display.set_mode((self.screen_width, self.screen_height))
@@ -292,6 +414,7 @@ class ChatGUI:
         # State & UI
         self.font = pygame.font.Font("resources/roboto_fonts/Roboto-Regular.ttf", int(24 * 0.8))
         self.agents = agents
+        self.selected_advocate_key = selected_advocate_key # Store the selected advocate key
         self.chat_history = [
             "Please select who you would want to talk to...",
         ]
@@ -313,6 +436,10 @@ class ChatGUI:
         self.create_advocate_button = Button(
             self.screen_width - int(220 * 0.8), self.screen_height - int(60 * 0.8), int(200 * 0.8), int(40 * 0.8), "Create Advocate"
         )
+        self.num_custom_advocates = num_custom_advocates
+        self.select_custom_advocate_button = Button(
+            self.screen_width - int(220 * 0.8), self.screen_height - int(110 * 0.8), int(200 * 0.8), int(40 * 0.8), "Select Custom"
+        )
         self.prev_button = Button(self.dialogue_box_rect.x - int(60 * 0.8), self.dialogue_box_rect.centery - int(20 * 0.8), int(50 * 0.8), int(40 * 0.8), "<")
         self.next_button = Button(self.dialogue_box_rect.right + int(10 * 0.8), self.dialogue_box_rect.centery - int(20 * 0.8), int(50 * 0.8), int(40 * 0.8), ">")
         self.checkboxes = self._create_checkboxes()
@@ -322,8 +449,9 @@ class ChatGUI:
     def _create_checkboxes(self):
         checkboxes = []
         x, y = int(40 * 0.8), int(80 * 0.8)
-        for agent in self.agents.values():
-            checkboxes.append(CheckBox(x, y, int(20 * 0.8), int(20 * 0.8), agent.profile.name))
+        for agent_name, agent_obj in self.agents.items():
+            is_on = (agent_name == self.selected_advocate_key) # Pre-select if it matches
+            checkboxes.append(CheckBox(x, y, int(20 * 0.8), int(20 * 0.8), agent_obj.profile.name, is_on=is_on))
             y += int(40 * 0.8)
         return checkboxes
 
@@ -365,6 +493,9 @@ class ChatGUI:
         if event.type == pygame.MOUSEWHEEL:
             self.chat_scroll_offset -= event.y * 10
             self._clamp_chat_scroll()
+        
+        if self.num_custom_advocates > 0 and self.select_custom_advocate_button.is_clicked(event):
+            return "select_advocate"
 
     def _clamp_chat_scroll(self):
         content_height = self._get_chat_content_height()
@@ -423,6 +554,8 @@ class ChatGUI:
         self.main_input_box.draw(screen)
         self.submit_button.draw(screen)
         self.create_advocate_button.draw(screen)
+        if self.num_custom_advocates > 0:
+            self.select_custom_advocate_button.draw(screen)
         
         screen.blit(self.checkbox_label, (int(40 * 0.8), int(40 * 0.8)))
         for checkbox in self.checkboxes:
