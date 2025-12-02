@@ -168,7 +168,7 @@ def main():
                             except Exception as exc:
                                 print(f'{agent.profile.name} generated an exception: {exc}')
                     
-                    chat_gui.current_chat_index = len(chat_gui.chat_history) - len(active_agents)
+                    # Removed current_chat_index - using speech bubbles instead
             
             chat_gui.draw(screen)
 
