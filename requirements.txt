@@ -1,3 +1,6 @@
 langchain-google-genai
 pygame
 google-generativeai
+pygame-menu
+pygame-gui
+pydantic

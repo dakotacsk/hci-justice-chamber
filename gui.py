@@ -1,174 +1,216 @@
 import pygame
+import pygame_gui
 import time
 
 # --- UI Components ---
 
 
 class Button:
-    def __init__(self, x, y, width, height, label, color=(100, 100, 200)):
+    """Wrapper for pygame-gui UIButton to maintain compatibility"""
+    def __init__(self, x, y, width, height, label, manager, color=(100, 100, 200)):
         self.rect = pygame.Rect(x, y, width, height)
         self.label = label
         self.color = color
-        self.font = pygame.font.Font("resources/roboto_fonts/Roboto-Bold.ttf", int(24 * 0.8))
+        self.button = pygame_gui.elements.UIButton(
+            relative_rect=self.rect,
+            text=label,
+            manager=manager
+        )
+        # Set custom colors
+        self.button.colours['normal_bg'] = color
+        self.button.colours['hovered_bg'] = tuple(min(255, c + 20) for c in color)
+        self.button.colours['pressed_bg'] = tuple(max(0, c - 20) for c in color)
 
     def draw(self, screen):
-        pygame.draw.rect(screen, self.color, self.rect, border_radius=5)
-        label_surface = self.font.render(self.label, True, (255, 255, 255))
-        text_rect = label_surface.get_rect(center=self.rect.center)
-        screen.blit(label_surface, text_rect)
+        # pygame-gui handles drawing automatically
+        pass
 
     def is_clicked(self, event):
-        if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
-            if self.rect.collidepoint(event.pos):
+        if event.type == pygame_gui.UI_BUTTON_PRESSED:
+            if event.ui_element == self.button:
                 return True
         return False
 
 
 class CheckBox:
-    def __init__(self, x, y, width, height, label, is_on=False):
+    """Wrapper for pygame-gui UICheckBox to maintain compatibility"""
+    def __init__(self, x, y, width, height, label, manager, is_on=False):
         self.rect = pygame.Rect(x, y, width, height)
         self.label = label
-        self.is_on = is_on
-        self.font = pygame.font.Font("resources/roboto_fonts/Roboto-Regular.ttf", int(24 * 0.8))
+        self.checkbox = pygame_gui.elements.UICheckBox(
+            relative_rect=self.rect,
+            text="",  # Empty text since we draw label separately
+            manager=manager
+        )
+        # Track state ourselves since pygame-gui UICheckBox state can be tricky
+        self._checked = is_on
+        if is_on:
+            try:
+                self.checkbox.checked = True
+            except:
+                pass
+        # Create label text separately
+        self.label_surface = pygame.font.Font("resources/roboto_fonts/Roboto-Regular.ttf", int(24 * 0.8)).render(
+            label, True, (255, 255, 255)
+        )
+        self.label_pos = (self.rect.x + self.rect.width + 10, self.rect.y)
 
     def draw(self, screen):
-        pygame.draw.rect(screen, (0, 0, 0), self.rect, 2)
-        if self.is_on:
-            pygame.draw.rect(screen, (0, 0, 0), (self.rect.x + 3, self.rect.y + 3, self.rect.width - 6, self.rect.height - 6))
-        label_surface = self.font.render(self.label, True, (0, 0, 0))
-        screen.blit(label_surface, (self.rect.x + self.rect.width + 10, self.rect.y))
+        # pygame-gui handles checkbox drawing, but we draw the label
+        screen.blit(self.label_surface, self.label_pos)
+
+    @property
+    def is_on(self):
+        # Try multiple methods to check state
+        try:
+            # First try the checked attribute
+            if hasattr(self.checkbox, 'checked'):
+                checked = self.checkbox.checked
+                self._checked = bool(checked)
+                return self._checked
+        except:
+            pass
+        
+        # Try get_state()
+        try:
+            state = self.checkbox.get_state()
+            # UICheckBox states: when checked, might be 'selected' or contain 'selected'
+            if 'selected' in str(state).lower():
+                self._checked = True
+                return True
+        except:
+            pass
+        
+        # Fallback to our tracked state
+        return self._checked
+
+    @is_on.setter
+    def is_on(self, value):
+        self._checked = bool(value)
+        try:
+            self.checkbox.checked = self._checked
+        except:
+            pass
 
     def handle_event(self, event):
-        if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
-            if self.rect.collidepoint(event.pos):
-                self.is_on = not self.is_on
-                return True
+        # Listen for checkbox state changes
+        if event.type == pygame_gui.UI_CHECK_BOX_CHECKED:
+            if event.ui_element == self.checkbox:
+                self._checked = True
+        elif event.type == pygame_gui.UI_CHECK_BOX_UNCHECKED:
+            if event.ui_element == self.checkbox:
+                self._checked = False
         return False
 
 
 class TextInputBox:
-    def __init__(self, x, y, width, height, font, placeholder=""):
+    """Multi-line text input using UITextBox with manual editing support"""
+    def __init__(self, x, y, width, height, font, manager, placeholder=""):
         self.rect = pygame.Rect(x, y, width, height)
-        self.text = ""
         self.placeholder = placeholder
         self.font = font
         self.active = False
-        self.color_active = pygame.Color("dodgerblue2")
-        self.color_inactive = pygame.Color("lightgray")
-        self.color = self.color_inactive
-        self.lines = [""]
-        self.scroll_offset = 0
-        self.line_height = font.get_linesize()
-        self.scrollbar_width = int(15 * 0.8)
-        self.dragging_scrollbar = False
+        
+        # Use UITextBox for display with scrollbars
+        # Set placeholder as initial HTML if provided
+        initial_html = ""
+        if placeholder:
+            initial_html = f'<body bgcolor="#FFFFFF"><font color="#999999">{placeholder}</font></body>'
+        self.textbox = pygame_gui.elements.UITextBox(
+            relative_rect=self.rect,
+            html_text=initial_html,
+            manager=manager,
+            wrap_to_height=True
+        )
+        # Try to make background transparent/white by setting all possible color properties
+        white = pygame.Color(255, 255, 255)
+        black = pygame.Color(0, 0, 0)
+        if hasattr(self.textbox, 'colours'):
+            # Set all background-related colors to white
+            for bg_key in ['dark_bg', 'normal_bg', 'selected_bg', 'bg', 'background_colour', 'misc_bg']:
+                if bg_key in self.textbox.colours:
+                    self.textbox.colours[bg_key] = white
+            # Set text colors to black
+            for text_key in ['normal_text', 'text', 'text_colour', 'text_color']:
+                if text_key in self.textbox.colours:
+                    self.textbox.colours[text_key] = black
+        # Also try setting background_colour attribute directly if it exists
+        if hasattr(self.textbox, 'background_colour'):
+            self.textbox.background_colour = white
+        self.textbox.rebuild()
+        
+        # Store text separately
+        self._text = ""
+        self._lines = [""]
 
     def handle_event(self, event):
         if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
             if self.rect.collidepoint(event.pos):
                 self.active = True
-                self.color = self.color_active
-                scrollbar_rect = self._get_scrollbar_rect()
-                if scrollbar_rect and scrollbar_rect.collidepoint(event.pos):
-                    self.dragging_scrollbar = True
             else:
                 self.active = False
-                self.color = self.color_inactive
-
-        if event.type == pygame.MOUSEBUTTONUP and event.button == 1:
-            self.dragging_scrollbar = False
-
-        if event.type == pygame.MOUSEMOTION and self.dragging_scrollbar:
-            mouse_y = event.pos[1]
-            thumb_rect = self._get_thumb_rect()
-            if thumb_rect:
-                content_height = len(self.lines) * self.line_height
-                if content_height > self.rect.height:
-                    scrollable_height = self.rect.height - thumb_rect.height
-                    if scrollable_height > 0:
-                        ratio = (mouse_y - self.rect.y - thumb_rect.height / 2) / scrollable_height
-                        self.scroll_offset = ratio * (len(self.lines) - self.rect.height / self.line_height)
-                        self._clamp_scroll()
 
         if event.type == pygame.KEYDOWN and self.active:
             if event.key == pygame.K_BACKSPACE:
-                if self.lines[-1]:
-                    self.lines[-1] = self.lines[-1][:-1]
-                elif len(self.lines) > 1:
-                    self.lines.pop()
+                if self._lines[-1]:
+                    self._lines[-1] = self._lines[-1][:-1]
+                elif len(self._lines) > 1:
+                    self._lines.pop()
             elif event.key == pygame.K_RETURN:
-                self.lines.append("")
+                self._lines.append("")
             else:
-                self.lines[-1] += event.unicode
-                self._wrap_text()
-            self.text = "\n".join(self.lines)
-
-        if event.type == pygame.MOUSEWHEEL and self.active:
-            self.scroll_offset -= event.y
-            self._clamp_scroll()
-
-    def _clamp_scroll(self):
-        max_scroll = max(0, len(self.lines) - int(self.rect.height / self.line_height))
-        if self.scroll_offset < 0:
-            self.scroll_offset = 0
-        if self.scroll_offset > max_scroll:
-            self.scroll_offset = max_scroll
-
-    def _wrap_text(self):
-        max_width = self.rect.width - 10 - self.scrollbar_width
-        while self.font.size(self.lines[-1])[0] > max_width:
-            line = self.lines[-1]
-            split_pos = -1
-            for i in range(len(line) - 1, 0, -1):
-                if line[i] == ' ':
-                    split_pos = i
-                    break
-            if split_pos != -1:
-                self.lines[-1] = line[:split_pos]
-                self.lines.append(line[split_pos+1:])
+                if event.unicode:
+                    self._lines[-1] += event.unicode
+            self._text = "\n".join(self._lines)
+            # Update the textbox - escape HTML and convert newlines
+            if self._text:
+                escaped_msg = self._text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\n", "<br>")
+                html_text = f'<body bgcolor="#FFFFFF"><font color="#000000">{escaped_msg}</font></body>'
             else:
-                # No space found, just break the line
-                self.lines.append(self.lines[-1][-1])
-                self.lines[-2] = self.lines[-2][:-1]
+                # Show placeholder if text is empty
+                html_text = f'<body bgcolor="#FFFFFF"><font color="#999999">{self.placeholder}</font></body>' if self.placeholder else '<body bgcolor="#FFFFFF"></body>'
+            self.textbox.html_text = html_text
+            self.textbox.rebuild()
+            # Ensure white background after rebuild - try all possible keys
+            if hasattr(self.textbox, 'colours'):
+                white = pygame.Color(255, 255, 255)
+                for bg_key in ['dark_bg', 'normal_bg', 'selected_bg', 'bg', 'background_colour', 'misc_bg']:
+                    if bg_key in self.textbox.colours:
+                        self.textbox.colours[bg_key] = white
 
-    def _get_scrollbar_rect(self):
-        return pygame.Rect(self.rect.right - self.scrollbar_width, self.rect.y, self.scrollbar_width, self.rect.height)
+    @property
+    def text(self):
+        return self._text
 
-    def _get_thumb_rect(self):
-        content_height = len(self.lines) * self.line_height
-        if content_height > self.rect.height:
-            thumb_height = self.rect.height * (self.rect.height / content_height)
-            scrollable_range = content_height - self.rect.height
-            if scrollable_range > 0:
-                thumb_y = self.rect.y + (self.scroll_offset * self.line_height) * (self.rect.height - thumb_height) / scrollable_range
-                return pygame.Rect(self.rect.right - self.scrollbar_width, thumb_y, self.scrollbar_width, thumb_height)
-        return None
+    @text.setter
+    def text(self, value):
+        self._text = value
+        self._lines = value.split("\n") if value else [""]
+        if value:
+            escaped_msg = value.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\n", "<br>")
+            html_text = f'<body bgcolor="#FFFFFF"><font color="#000000">{escaped_msg}</font></body>'
+        else:
+            # Show placeholder if text is empty
+            html_text = f'<body bgcolor="#FFFFFF"><font color="#999999">{self.placeholder}</font></body>' if self.placeholder else '<body bgcolor="#FFFFFF"></body>'
+        self.textbox.html_text = html_text
+        self.textbox.rebuild()
+        # Ensure white background after rebuild
+        if hasattr(self.textbox, 'colours'):
+            white = pygame.Color(255, 255, 255)
+            for bg_key in ['dark_bg', 'normal_bg', 'selected_bg', 'bg']:
+                if bg_key in self.textbox.colours:
+                    self.textbox.colours[bg_key] = white
 
     def clear(self):
         self.text = ""
-        self.lines = [""]
+        self._lines = [""]
 
     def draw(self, screen):
+        # Draw white background rectangle - this will be drawn before pygame-gui renders
+        # Fill the entire rect with white to cover any grey background
         pygame.draw.rect(screen, (255, 255, 255), self.rect)
-        pygame.draw.rect(screen, self.color, self.rect, 2)
-
-        if not self.text and self.placeholder:
-            placeholder_surface = self.font.render(self.placeholder, True, (150, 150, 150))
-            screen.blit(placeholder_surface, (self.rect.x + 5, self.rect.y + 5))
-            return
-
-        y = self.rect.y + 5 - self.scroll_offset * self.line_height
-        for line in self.lines:
-            if y + self.line_height > self.rect.y and y < self.rect.bottom:
-                text_surface = self.font.render(line, True, (0, 0, 0))
-                screen.blit(text_surface, (self.rect.x + 5, y))
-            y += self.line_height
-
-        scrollbar_rect = self._get_scrollbar_rect()
-        if scrollbar_rect:
-            pygame.draw.rect(screen, (230, 230, 230), scrollbar_rect)
-            thumb_rect = self._get_thumb_rect()
-            if thumb_rect:
-                pygame.draw.rect(screen, (180, 180, 180), thumb_rect)
+        # Draw a subtle border
+        pygame.draw.rect(screen, (220, 220, 220), self.rect, width=1)
 
 
 # --- Main UI Views ---
@@ -176,6 +218,7 @@ class TextInputBox:
 
 class CreationForm:
     def __init__(self, screen_width, screen_height):
+        self.manager = pygame_gui.UIManager((screen_width, screen_height))
         self.font_title = pygame.font.Font("resources/roboto_fonts/Roboto-Bold.ttf", int(48 * 0.8))
         self.font_label = pygame.font.Font("resources/roboto_fonts/Roboto-Regular.ttf", int(32 * 0.8))
         self.font_input = pygame.font.Font("resources/roboto_fonts/Roboto-Regular.ttf", int(28 * 0.8))
@@ -199,35 +242,50 @@ class CreationForm:
 
         for i, q in enumerate(self.questions):
             y_pos = start_y + i * y_padding
-            label_surface = self.font_label.render(q, True, (255, 255, 255))
+            label_surface = self.font_label.render(q, True, (255, 255, 255))  # White text for dark blue background
             self.labels.append((label_surface, (self.width / 2 - input_w / 2, y_pos)))
-            box = TextInputBox(
+            
+            # Use TextInputBox for multi-line input with scrollbars
+            box_rect = pygame.Rect(
                 self.width / 2 - input_w / 2,
                 y_pos + int(40 * 0.8),
                 input_w,
-                input_h,
-                self.font_input,
+                input_h
             )
-            self.input_boxes.append(box)
+            textbox = TextInputBox(
+                box_rect.x, box_rect.y, box_rect.width, box_rect.height,
+                self.font_input, self.manager
+            )
+            self.input_boxes.append(textbox)
 
-        self.save_button = Button(
+        save_rect = pygame.Rect(
             self.width / 2 - int(100 * 0.8),
             start_y + len(self.questions) * y_padding,
             int(200 * 0.8),
-            int(50 * 0.8),
-            "Save Advocate",
+            int(50 * 0.8)
+        )
+        self.save_button = Button(
+            save_rect.x, save_rect.y, save_rect.width, save_rect.height,
+            "Save Advocate", self.manager
+        )
+        
+        back_rect = pygame.Rect(
+            int(20 * 0.8),
+            int(20 * 0.8),
+            int(40 * 0.8),
+            int(40 * 0.8)
         )
         self.back_button = Button(
-            int(20 * 0.8),
-            int(20 * 0.8),
-            int(40 * 0.8),
-            int(40 * 0.8),
-            "<",
+            back_rect.x, back_rect.y, back_rect.width, back_rect.height,
+            "<", self.manager
         )
 
     def handle_event(self, event):
+        self.manager.process_events(event)
+        
         for box in self.input_boxes:
             box.handle_event(event)
+            
         if self.save_button.is_clicked(event):
             return {
                 "name": self.input_boxes[0].text,
@@ -242,145 +300,53 @@ class CreationForm:
     def draw(self, screen):
         screen.fill((20, 20, 40))  # Dark blue background
         title_surface = self.font_title.render(
-            "Create Your Justice Advocate", True, (255, 255, 255)
+            "Create Your Justice Advocate", True, (255, 255, 255)  # White text
         )
         screen.blit(title_surface, (self.width / 2 - title_surface.get_width() / 2, int(50 * 0.8)))
 
         for label, pos in self.labels:
             screen.blit(label, pos)
+        # Draw white backgrounds for input boxes before pygame-gui renders
         for box in self.input_boxes:
             box.draw(screen)
 
         self.save_button.draw(screen)
         self.back_button.draw(screen)
-
-
-
-class AdvocateSelectionScreen:
-    def __init__(self, screen_width, screen_height, custom_advocates: list): # custom_advocates will be a list of AgentProfile objects
-        self.screen_width = screen_width
-        self.screen_height = screen_height
-        self.font_title = pygame.font.Font("resources/roboto_fonts/Roboto-Bold.ttf", int(48 * 0.8))
-        self.font_advocate = pygame.font.Font("resources/roboto_fonts/Roboto-Regular.ttf", int(28 * 0.8))
-
-        self.custom_advocates = custom_advocates # Store the list of custom advocates
-
-        self.advocate_images = {}
-        # Load images for default advocates (if any) and custom advocates
-        # For custom advocates, we'll need a default image or assume they have one.
-        # For now, let's assume custom advocates don't have specific images and use a placeholder or default.
-        # Or, if the custom advocate name matches one of the existing sprite keys, use that.
         
-        # Default sprites (if needed, otherwise remove)
-        default_sprites = {
-            "meritocracy": "Jamie Reyes",
-            "rawlsian": "Jordan Chex",
-            "restorative": "Amara Ndlovu",
-            "utilitarian": "Dr. Sam Iqbal",
-        }
-        for key in default_sprites.keys():
-            self.advocate_images[key] = pygame.transform.scale(
-                pygame.image.load(f"resources/sprites/{key}.png").convert_alpha(),
-                (int(150 * 0.8), int(150 * 0.8)), # Larger size for selection
-            )
+        self.manager.update(pygame.time.get_ticks() / 1000.0)
+        self.manager.draw_ui(screen)
         
-        # For custom advocates, we'll need to decide how to get their image.
-        # For now, let's assume they don't have a specific image and we'll use a generic one or just their name.
-        # If the custom advocate's name matches a default sprite key, it will use that image.
-        # Otherwise, we'll need a placeholder. Let's use 'meritocracy' as a placeholder for now.
-        self.placeholder_image = pygame.transform.scale(
-            pygame.image.load("resources/sprites/meritocracy.png").convert_alpha(),
-            (int(150 * 0.8), int(150 * 0.8)),
-        )
-
-        self.advocate_buttons = []
-        self.back_button = Button(
-            int(20 * 0.8),
-            int(20 * 0.8),
-            int(100 * 0.8),
-            int(50 * 0.8),
-            "Back",
-        )
-
-        self.scroll_offset = 0
-        self.item_height = int(200 * 0.8) # Height of each advocate item (image + text)
-        self.padding = int(20 * 0.8)
-        self._create_advocate_buttons()
-
-    def _create_advocate_buttons(self):
-        self.advocate_buttons = []
-        start_x = self.screen_width / 2 - int(200 * 0.8) # Center the buttons
-        start_y = int(150 * 0.8) # Below the title
-
-        for i, advocate_profile in enumerate(self.custom_advocates):
-            key = advocate_profile.name # Use advocate name as key
-            # Create a "button" area for each advocate
-            button_rect = pygame.Rect(
-                start_x,
-                start_y + i * (self.item_height + self.padding),
-                int(400 * 0.8),
-                self.item_height,
-            )
-            self.advocate_buttons.append({"key": key, "name": advocate_profile.name, "rect": button_rect})
-
-    def handle_event(self, event):
-        if self.back_button.is_clicked(event):
-            return "back"
-
-        if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
-            for advocate_btn in self.advocate_buttons:
-                # Adjust for scroll offset when checking click
-                adjusted_rect = advocate_btn["rect"].copy()
-                adjusted_rect.y -= self.scroll_offset
-                if adjusted_rect.collidepoint(event.pos):
-                    return advocate_btn["key"]
-
-        if event.type == pygame.MOUSEWHEEL:
-            self.scroll_offset -= event.y * 10
-            self._clamp_scroll()
-        return None
-
-    def _clamp_scroll(self):
-        content_height = len(self.advocates_data) * (self.item_height + self.padding)
-        max_scroll = max(0, content_height - (self.screen_height - int(200 * 0.8))) # Max scrollable area
-        if self.scroll_offset < 0:
-            self.scroll_offset = 0
-        if self.scroll_offset > max_scroll:
-            self.scroll_offset = max_scroll
-
-    def draw(self, screen):
-        screen.fill((30, 30, 60)) # Darker blue background
-
-        title_surface = self.font_title.render("Select Your Advocate", True, (255, 255, 255))
-        screen.blit(title_surface, (self.screen_width / 2 - title_surface.get_width() / 2, int(50 * 0.8)))
-
-        # Draw advocate buttons
-        for advocate_btn in self.advocate_buttons:
-            rect = advocate_btn["rect"].copy()
-            rect.y -= self.scroll_offset
-
-            # Only draw if visible on screen
-            if rect.bottom > int(100 * 0.8) and rect.top < self.screen_height:
-                pygame.draw.rect(screen, (50, 50, 100), rect, border_radius=10) # Button background
-                pygame.draw.rect(screen, (100, 100, 200), rect, 2, border_radius=10) # Border
-
-                # Draw image
-                image = self.advocate_images.get(advocate_btn["key"], self.placeholder_image) # Use specific image or placeholder
-                image_rect = image.get_rect(center=(rect.centerx, rect.y + int(rect.height * 0.4)))
-                screen.blit(image, image_rect)
-
-                # Draw name
-                name_surface = self.font_advocate.render(advocate_btn["name"], True, (255, 255, 255))
-                name_rect = name_surface.get_rect(center=(rect.centerx, rect.y + int(rect.height * 0.8)))
-                screen.blit(name_surface, name_rect)
-
-        self.back_button.draw(screen)
+        # Draw white rectangles over text boxes AFTER pygame-gui renders
+        # This will cover the grey background, but we need to preserve text
+        # Since pygame-gui renders text as part of the element, we'll need to re-draw text
+        # Actually, let's try a simpler approach: just ensure our pre-draw white rectangles are working
+        # The grey might be coming from pygame-gui's default theme
+        # Let's try drawing white with a special blend mode that preserves text colors
+        for box in self.input_boxes:
+            # Draw white rectangle - this will cover grey but also text
+            # We'll need to re-render the text content
+            pygame.draw.rect(screen, (255, 255, 255), box.rect)
+            pygame.draw.rect(screen, (220, 220, 220), box.rect, width=1)
+            # Re-render text content on top
+            if box._text:
+                # Render text manually on top of white background
+                y_offset = box.rect.y + 5
+                for line in box._lines:
+                    if line:
+                        text_surface = box.font.render(line, True, (0, 0, 0))
+                        screen.blit(text_surface, (box.rect.x + 5, y_offset))
+                    y_offset += box.font.get_linesize()
+            elif box.placeholder:
+                # Render placeholder
+                placeholder_surface = box.font.render(box.placeholder, True, (150, 150, 150))
+                screen.blit(placeholder_surface, (box.rect.x + 5, box.rect.y + 5))
 
 
 class ChatGUI:
     def __init__(self, agents, screen_width, screen_height, selected_advocate_key=None, num_custom_advocates=0):
         self.screen_width = screen_width
         self.screen_height = screen_height
+        self.manager = pygame_gui.UIManager((screen_width, screen_height))
         self.screen = pygame.display.set_mode((self.screen_width, self.screen_height))
         pygame.display.set_caption("Justice Council")
 
@@ -414,48 +380,114 @@ class ChatGUI:
         # State & UI
         self.font = pygame.font.Font("resources/roboto_fonts/Roboto-Regular.ttf", int(24 * 0.8))
         self.agents = agents
-        self.selected_advocate_key = selected_advocate_key # Store the selected advocate key
         self.chat_history = [
             "Please select who you would want to talk to...",
         ]
         self.current_chat_index = 0
-        self.chat_scroll_offset = 0
-        self.chat_scrollbar_width = int(15 * 0.8)
-        self.dragging_chat_scrollbar = False
+        self._last_displayed_index = -1
+        
+        # Create chat display textbox with scrollbars
+        self.chat_display = pygame_gui.elements.UITextBox(
+            relative_rect=self.dialogue_box_rect,
+            html_text="Please select who you would want to talk to...",
+            manager=self.manager,
+            wrap_to_height=True
+        )
+        # Ensure white background for chat display
+        # UITextBox uses 'dark_bg' for the main background color
+        if hasattr(self.chat_display, 'colours'):
+            white = pygame.Color(255, 255, 255)
+            black = pygame.Color(0, 0, 0)
+            # Set background to white - try all possible background color keys
+            for bg_key in ['dark_bg', 'normal_bg', 'selected_bg', 'bg']:
+                if bg_key in self.chat_display.colours:
+                    self.chat_display.colours[bg_key] = white
+            # Set text color to black
+            for text_key in ['normal_text', 'text', 'text_colour']:
+                if text_key in self.chat_display.colours:
+                    self.chat_display.colours[text_key] = black
+            # Force rebuild to apply colors
+            self.chat_display.rebuild()
+        self._update_chat_display()
+        
         input_box_x = int((1560 - 40 - 500) * 0.8)
         input_box_y = int(40 * 0.8)
         input_box_width = int(500 * 0.8)
         input_box_height = int(self.screen_height * 0.2)
         
+        input_rect = pygame.Rect(input_box_x, input_box_y, input_box_width, input_box_height)
         self.main_input_box = TextInputBox(
-            input_box_x, input_box_y, input_box_width, input_box_height, pygame.font.Font("resources/roboto_fonts/Roboto-Regular.ttf", int(24 * 0.8)), placeholder="(ask a question or tell a story about justice...)"
+            input_box_x, input_box_y, input_box_width, input_box_height,
+            pygame.font.Font("resources/roboto_fonts/Roboto-Regular.ttf", int(24 * 0.8)),
+            self.manager,
+            placeholder="(ask a question or tell a story about justice...)"
+        )
+        
+        submit_rect = pygame.Rect(
+            input_box_x + input_box_width - int(120 * 0.8),
+            input_box_y + input_box_height + int(10 * 0.8),
+            int(120 * 0.8),
+            int(40 * 0.8)
         )
         self.submit_button = Button(
-            input_box_x + input_box_width - int(120 * 0.8), input_box_y + input_box_height + int(10 * 0.8), int(120 * 0.8), int(40 * 0.8), "Submit"
+            submit_rect.x, submit_rect.y, submit_rect.width, submit_rect.height,
+            "Submit", self.manager
+        )
+        
+        create_rect = pygame.Rect(
+            self.screen_width - int(220 * 0.8),
+            self.screen_height - int(60 * 0.8),
+            int(200 * 0.8),
+            int(40 * 0.8)
         )
         self.create_advocate_button = Button(
-            self.screen_width - int(220 * 0.8), self.screen_height - int(60 * 0.8), int(200 * 0.8), int(40 * 0.8), "Create Advocate"
+            create_rect.x, create_rect.y, create_rect.width, create_rect.height,
+            "Create Advocate", self.manager
         )
-        self.num_custom_advocates = num_custom_advocates
-        self.select_custom_advocate_button = Button(
-            self.screen_width - int(220 * 0.8), self.screen_height - int(110 * 0.8), int(200 * 0.8), int(40 * 0.8), "Select Custom"
+        
+        prev_rect = pygame.Rect(
+            self.dialogue_box_rect.x - int(60 * 0.8),
+            self.dialogue_box_rect.centery - int(20 * 0.8),
+            int(50 * 0.8),
+            int(40 * 0.8)
         )
-        self.prev_button = Button(self.dialogue_box_rect.x - int(60 * 0.8), self.dialogue_box_rect.centery - int(20 * 0.8), int(50 * 0.8), int(40 * 0.8), "<")
-        self.next_button = Button(self.dialogue_box_rect.right + int(10 * 0.8), self.dialogue_box_rect.centery - int(20 * 0.8), int(50 * 0.8), int(40 * 0.8), ">")
+        self.prev_button = Button(
+            prev_rect.x, prev_rect.y, prev_rect.width, prev_rect.height,
+            "<", self.manager
+        )
+        
+        next_rect = pygame.Rect(
+            self.dialogue_box_rect.right + int(10 * 0.8),
+            self.dialogue_box_rect.centery - int(20 * 0.8),
+            int(50 * 0.8),
+            int(40 * 0.8)
+        )
+        self.next_button = Button(
+            next_rect.x, next_rect.y, next_rect.width, next_rect.height,
+            ">", self.manager
+        )
+        
         self.checkboxes = self._create_checkboxes()
-        self.checkbox_label = pygame.font.Font("resources/roboto_fonts/Roboto-Regular.ttf", int(24 * 0.8)).render("Select the character(s) you would like to talk to:", True, (0, 0, 0))
-
+        self.checkbox_label = pygame.font.Font("resources/roboto_fonts/Roboto-Regular.ttf", int(24 * 0.8)).render(
+            "Select the character(s) you would like to talk to:", True, (20, 20, 20)  # Black text for visibility
+        )
 
     def _create_checkboxes(self):
         checkboxes = []
         x, y = int(40 * 0.8), int(80 * 0.8)
-        for agent_name, agent_obj in self.agents.items():
-            is_on = (agent_name == self.selected_advocate_key) # Pre-select if it matches
-            checkboxes.append(CheckBox(x, y, int(20 * 0.8), int(20 * 0.8), agent_obj.profile.name, is_on=is_on))
+        for agent in self.agents.values():
+            checkbox_rect = pygame.Rect(x, y, int(20 * 0.8), int(20 * 0.8))
+            checkbox = CheckBox(
+                checkbox_rect.x, checkbox_rect.y, checkbox_rect.width, checkbox_rect.height,
+                agent.profile.name, self.manager
+            )
+            checkboxes.append(checkbox)
             y += int(40 * 0.8)
         return checkboxes
 
     def handle_event(self, event):
+        self.manager.process_events(event)
+        
         self.main_input_box.handle_event(event)
         for checkbox in self.checkboxes:
             checkbox.handle_event(event)
@@ -465,88 +497,41 @@ class ChatGUI:
                 self.current_chat_index -= 1
                 while self.current_chat_index > 0 and self.chat_history[self.current_chat_index].startswith("You:"):
                     self.current_chat_index -= 1
+                self._update_chat_display()
+                
         if self.next_button.is_clicked(event):
             if self.current_chat_index < len(self.chat_history) - 1:
                 self.current_chat_index += 1
                 while self.current_chat_index < len(self.chat_history) - 1 and self.chat_history[self.current_chat_index].startswith("You:"):
                     self.current_chat_index += 1
+                self._update_chat_display()
 
-        if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
-            chat_scrollbar_rect = self._get_chat_scrollbar_rect()
-            if chat_scrollbar_rect and chat_scrollbar_rect.collidepoint(event.pos):
-                self.dragging_chat_scrollbar = True
-
-        if event.type == pygame.MOUSEBUTTONUP and event.button == 1:
-            self.dragging_chat_scrollbar = False
-
-        if event.type == pygame.MOUSEMOTION and self.dragging_chat_scrollbar:
-            mouse_y = event.pos[1]
-            thumb_rect = self._get_chat_thumb_rect()
-            if thumb_rect:
-                content_height = self._get_chat_content_height()
-                if content_height > self.dialogue_box_rect.height:
-                    scrollable_height = self.dialogue_box_rect.height - thumb_rect.height
-                    ratio = (mouse_y - self.dialogue_box_rect.y - thumb_rect.height / 2) / scrollable_height
-                    self.chat_scroll_offset = ratio * (content_height - self.dialogue_box_rect.height)
-                    self._clamp_chat_scroll()
-
-        if event.type == pygame.MOUSEWHEEL:
-            self.chat_scroll_offset -= event.y * 10
-            self._clamp_chat_scroll()
-        
-        if self.num_custom_advocates > 0 and self.select_custom_advocate_button.is_clicked(event):
-            return "select_advocate"
-
-    def _clamp_chat_scroll(self):
-        content_height = self._get_chat_content_height()
-        max_scroll = max(0, content_height - self.dialogue_box_rect.height)
-        if self.chat_scroll_offset < 0:
-            self.chat_scroll_offset = 0
-        if self.chat_scroll_offset > max_scroll:
-            self.chat_scroll_offset = max_scroll
-
-    def _get_chat_content_height(self):
-        if not self.chat_history:
-            return 0
-        return render_wrapped_text(self.chat_history[self.current_chat_index], self.font, (0,0,0), self.dialogue_box_rect, self.screen, get_height=True)
-
-    def _get_chat_scrollbar_rect(self):
-        return pygame.Rect(self.dialogue_box_rect.right - self.chat_scrollbar_width, self.dialogue_box_rect.y, self.chat_scrollbar_width, self.dialogue_box_rect.height)
-
-    def _get_chat_thumb_rect(self):
-        content_height = self._get_chat_content_height()
-        if content_height > self.dialogue_box_rect.height:
-            thumb_height = self.dialogue_box_rect.height * (self.dialogue_box_rect.height / content_height)
-            scrollable_range = content_height - self.dialogue_box_rect.height
-            if scrollable_range > 0:
-                thumb_y = self.dialogue_box_rect.y + self.chat_scroll_offset * (self.dialogue_box_rect.height - thumb_height) / scrollable_range
-                return pygame.Rect(self.dialogue_box_rect.right - self.chat_scrollbar_width, thumb_y, self.chat_scrollbar_width, thumb_height)
-        return None
+    def _update_chat_display(self):
+        if self.chat_history and 0 <= self.current_chat_index < len(self.chat_history):
+            # Only update if index changed
+            if self._last_displayed_index != self.current_chat_index:
+                message = self.chat_history[self.current_chat_index]
+                # Escape HTML and convert newlines, wrap in div with white background and black text
+                escaped_msg = message.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\n", "<br>")
+                html_text = f'<body bgcolor="#FFFFFF"><font color="#000000">{escaped_msg}</font></body>'
+                self.chat_display.html_text = html_text
+                self.chat_display.rebuild()
+                # Set colors after rebuild to ensure they're applied
+                if hasattr(self.chat_display, 'colours'):
+                    white = pygame.Color(255, 255, 255)
+                    for bg_key in ['dark_bg', 'normal_bg', 'selected_bg', 'bg']:
+                        if bg_key in self.chat_display.colours:
+                            self.chat_display.colours[bg_key] = white
+                # Reset scroll position to top when displaying new message
+                if hasattr(self.chat_display, 'scroll_bar') and self.chat_display.scroll_bar is not None:
+                    self.chat_display.scroll_bar.set_scroll_from_start_percentage(0.0)
+                self._last_displayed_index = self.current_chat_index
 
     def draw(self, screen):
         screen.blit(self.background_image, (0, 0))
 
-        if self.chat_history:
-            # Display the current message from the history
-            message = self.chat_history[self.current_chat_index]
-            
-            # Define bubble properties
-            bubble_rect = self.dialogue_box_rect
-            bubble_color = (255, 255, 255)
-            text_color = (0, 0, 0)
-            
-            # Determine tail position based on who is speaking
-            if message.startswith("You:"):
-                tail_pos = (bubble_rect.right - 20, bubble_rect.bottom)
-            else:
-                agent_name = message.split(":")[0]
-                if agent_name in self.sprites:
-                    sprite_pos = self._get_sprite_pos(agent_name)
-                    tail_pos = (sprite_pos[0] + 30, bubble_rect.top)
-                else:
-                    tail_pos = (bubble_rect.left + 20, bubble_rect.top)
-
-            draw_speech_bubble(screen, message, self.font, text_color, bubble_color, bubble_rect, tail_pos)
+        # Update chat display if index changed (e.g., when new messages are added)
+        self._update_chat_display()
 
         self.prev_button.draw(screen)
         self.next_button.draw(screen)
@@ -554,14 +539,20 @@ class ChatGUI:
         self.main_input_box.draw(screen)
         self.submit_button.draw(screen)
         self.create_advocate_button.draw(screen)
-        if self.num_custom_advocates > 0:
-            self.select_custom_advocate_button.draw(screen)
         
         screen.blit(self.checkbox_label, (int(40 * 0.8), int(40 * 0.8)))
         for checkbox in self.checkboxes:
             checkbox.draw(screen)
 
         self._draw_sprites(screen)
+        
+        # Draw white backgrounds before pygame-gui renders
+        # Draw white background for chat display
+        pygame.draw.rect(screen, (255, 255, 255), self.dialogue_box_rect)
+        pygame.draw.rect(screen, (200, 200, 200), self.dialogue_box_rect, width=2)
+        
+        self.manager.update(pygame.time.get_ticks() / 1000.0)
+        self.manager.draw_ui(screen)
 
     def _get_sprite_pos(self, agent_name):
         sprite_positions = {
@@ -580,66 +571,73 @@ class ChatGUI:
                     screen.blit(self.sprites[checkbox.label], sprite_pos)
 
 
-# --- Utility Functions ---
+class AdvocateSelectionScreen:
+    def __init__(self, screen_width, screen_height, custom_advocates):
+        self.screen_width = screen_width
+        self.screen_height = screen_height
+        self.manager = pygame_gui.UIManager((screen_width, screen_height))
+        self.custom_advocates = custom_advocates
+        
+        self.font_title = pygame.font.Font("resources/roboto_fonts/Roboto-Bold.ttf", int(48 * 0.8))
+        self.font_label = pygame.font.Font("resources/roboto_fonts/Roboto-Regular.ttf", int(32 * 0.8))
+        
+        # Create buttons for each advocate
+        self.advocate_buttons = []
+        start_y = int(150 * 0.8)
+        button_height = int(50 * 0.8)
+        button_width = int(400 * 0.8)
+        y_padding = int(70 * 0.8)
+        
+        for i, advocate in enumerate(custom_advocates):
+            button_rect = pygame.Rect(
+                self.screen_width / 2 - button_width / 2,
+                start_y + i * y_padding,
+                button_width,
+                button_height
+            )
+            button = Button(
+                button_rect.x, button_rect.y, button_rect.width, button_rect.height,
+                advocate.name, self.manager
+            )
+            button.advocate_name = advocate.name  # Store name for identification
+            self.advocate_buttons.append(button)
+        
+        # Back button
+        back_rect = pygame.Rect(
+            int(20 * 0.8),
+            int(20 * 0.8),
+            int(100 * 0.8),
+            int(40 * 0.8)
+        )
+        self.back_button = Button(
+            back_rect.x, back_rect.y, back_rect.width, back_rect.height,
+            "Back", self.manager
+        )
 
+    def handle_event(self, event):
+        self.manager.process_events(event)
+        
+        if self.back_button.is_clicked(event):
+            return "back"
+        
+        for button in self.advocate_buttons:
+            if button.is_clicked(event):
+                return button.advocate_name
+        
+        return None
 
-def draw_speech_bubble(surface, text, font, text_color, bubble_color, rect, tail_pos):
-    # Draw the bubble
-    pygame.draw.rect(surface, bubble_color, rect, border_radius=10)
-    
-    # Draw the tail
-    pygame.draw.polygon(surface, bubble_color, [tail_pos, (tail_pos[0] - 10, tail_pos[1] + 10), (tail_pos[0] + 10, tail_pos[1] + 10)])
-
-    render_wrapped_text(text, font, text_color, rect, surface)
-
-def render_wrapped_text(text, font, color, rect, surface, scroll_offset=0, get_height=False):
-    padding = 10
-    x, y = rect.x + padding, rect.y + padding - scroll_offset
-    max_width = rect.width - 2 * padding
-    line_height = font.get_linesize()
-    paragraphs = text.split("\n")
-
-    total_height = 0
-    for para in paragraphs:
-        words = para.split(" ")
-        line = ""
-        for word in words:
-            candidate = f"{line} {word}".strip()
-            if font.size(candidate)[0] <= max_width:
-                line = candidate
-            else:
-                total_height += line_height
-                line = word
-        total_height += line_height
-
-    if get_height:
-        return total_height
-
-    if scroll_offset < 0:
-        scroll_offset = 0
-    if total_height > rect.height and scroll_offset > total_height - rect.height:
-        scroll_offset = total_height - rect.height
-
-    y = rect.y + padding - scroll_offset
-
-    for para in paragraphs:
-        words = para.split(" ")
-        line = ""
-        for word in words:
-            candidate = f"{line} {word}".strip()
-            if font.size(candidate)[0] <= max_width:
-                line = candidate
-            else:
-                if y + line_height > rect.bottom - padding:
-                    return scroll_offset
-                if y + line_height > rect.top + padding:
-                    surface.blit(font.render(line, True, color), (x, y))
-                y += line_height
-                line = word
-        if line:
-            if y + line_height > rect.bottom - padding:
-                return scroll_offset
-            if y + line_height > rect.top + padding:
-                surface.blit(font.render(line, True, color), (x, y))
-            y += line_height
-    return scroll_offset
+    def draw(self, screen):
+        screen.fill((255, 255, 255))  # White background
+        
+        title_surface = self.font_title.render(
+            "Select an Advocate", True, (20, 20, 20)  # Black text
+        )
+        screen.blit(title_surface, (self.screen_width / 2 - title_surface.get_width() / 2, int(50 * 0.8)))
+        
+        for button in self.advocate_buttons:
+            button.draw(screen)
+        
+        self.back_button.draw(screen)
+        
+        self.manager.update(pygame.time.get_ticks() / 1000.0)
+        self.manager.draw_ui(screen)
