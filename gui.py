@@ -1,6 +1,7 @@
 import pygame
 import pygame_gui
 import time
+import math
 
 # --- UI Components ---
 
@@ -51,7 +52,7 @@ class CheckBox:
                 pass
         # Create label text separately
         self.label_surface = pygame.font.Font("resources/roboto_fonts/Roboto-Regular.ttf", int(24 * 0.8)).render(
-            label, True, (255, 255, 255)
+            label, True, (20, 20, 20)
         )
         self.label_pos = (self.rect.x + self.rect.width + 10, self.rect.y)
 
@@ -236,31 +237,38 @@ class CreationForm:
         self.labels = []
 
         input_w = self.width * 0.6
-        input_h = int(80 * 0.8)  # Increased height to show more content before scrolling
+        input_h = int(100 * 0.8)  # Increased height to show more content before scrolling
         start_y = int(150 * 0.8)
-        y_padding = int(100 * 0.8)
+        label_to_box_spacing = int(40 * 0.8)  # Space between label and input box
+        box_height = input_h
+        box_to_next_label_spacing = int(20 * 0.8)  # Space after input box before next label
+        y_padding = label_to_box_spacing + box_height + box_to_next_label_spacing  # Total spacing between labels
 
         for i, q in enumerate(self.questions):
             y_pos = start_y + i * y_padding
             label_surface = self.font_label.render(q, True, (255, 255, 255))  # White text for dark blue background
             self.labels.append((label_surface, (self.width / 2 - input_w / 2, y_pos)))
             
-            # Use TextInputBox for multi-line input with scrollbars
+            # Use TextInputBox for multi-line input with scrollbars - same as main page
             box_rect = pygame.Rect(
                 self.width / 2 - input_w / 2,
-                y_pos + int(40 * 0.8),
+                y_pos + label_to_box_spacing,
                 input_w,
                 input_h
             )
+            # Use placeholder text for better UX
+            placeholder_text = f"Enter your answer for question {i+1}..."
             textbox = TextInputBox(
                 box_rect.x, box_rect.y, box_rect.width, box_rect.height,
-                self.font_input, self.manager
+                self.font_input, self.manager, placeholder=placeholder_text
             )
             self.input_boxes.append(textbox)
 
+        # Position save button after the last input box with proper spacing
+        last_box_bottom = start_y + (len(self.questions) - 1) * y_padding + label_to_box_spacing + box_height
         save_rect = pygame.Rect(
             self.width / 2 - int(100 * 0.8),
-            start_y + len(self.questions) * y_padding,
+            last_box_bottom + int(30 * 0.8),  # Add spacing after last input box
             int(200 * 0.8),
             int(50 * 0.8)
         )
@@ -306,49 +314,28 @@ class CreationForm:
 
         for label, pos in self.labels:
             screen.blit(label, pos)
+        
         # Draw white backgrounds for input boxes before pygame-gui renders
+        # This ensures the UITextBox scrollbars work properly
         for box in self.input_boxes:
             box.draw(screen)
 
         self.save_button.draw(screen)
         self.back_button.draw(screen)
         
+        # Update and draw pygame-gui elements (including UITextBox with scrollbars)
         self.manager.update(pygame.time.get_ticks() / 1000.0)
         self.manager.draw_ui(screen)
-        
-        # Draw white rectangles over text boxes AFTER pygame-gui renders
-        # This will cover the grey background, but we need to preserve text
-        # Since pygame-gui renders text as part of the element, we'll need to re-draw text
-        # Actually, let's try a simpler approach: just ensure our pre-draw white rectangles are working
-        # The grey might be coming from pygame-gui's default theme
-        # Let's try drawing white with a special blend mode that preserves text colors
-        for box in self.input_boxes:
-            # Draw white rectangle - this will cover grey but also text
-            # We'll need to re-render the text content
-            pygame.draw.rect(screen, (255, 255, 255), box.rect)
-            pygame.draw.rect(screen, (220, 220, 220), box.rect, width=1)
-            # Re-render text content on top
-            if box._text:
-                # Render text manually on top of white background
-                y_offset = box.rect.y + 5
-                for line in box._lines:
-                    if line:
-                        text_surface = box.font.render(line, True, (0, 0, 0))
-                        screen.blit(text_surface, (box.rect.x + 5, y_offset))
-                    y_offset += box.font.get_linesize()
-            elif box.placeholder:
-                # Render placeholder
-                placeholder_surface = box.font.render(box.placeholder, True, (150, 150, 150))
-                screen.blit(placeholder_surface, (box.rect.x + 5, box.rect.y + 5))
 
 
 class ChatGUI:
-    def __init__(self, agents, screen_width, screen_height, selected_advocate_key=None, num_custom_advocates=0):
+    def __init__(self, agents, screen_width, screen_height, selected_advocate_key=None, num_custom_advocates=0, speech_recognizer=None):
         self.screen_width = screen_width
         self.screen_height = screen_height
         self.manager = pygame_gui.UIManager((screen_width, screen_height))
         self.screen = pygame.display.set_mode((self.screen_width, self.screen_height))
         pygame.display.set_caption("Justice Council")
+        self.speech_recognizer = speech_recognizer  # Store reference to speech recognizer for audio levels
 
         # Resources
         self.background_image = pygame.image.load("resources/background.jpg").convert()
@@ -397,6 +384,14 @@ class ChatGUI:
         self.speech_bubble_scroll_offsets = {}  # Scroll offsets per speaker for long messages
         self.speech_bubble_rects = {}  # Store speech bubble positions per speaker
         self.speech_bubble_scrollbars = {}  # pygame-gui scrollbars per speech bubble
+        
+        # Track which agents are currently thinking (generating responses)
+        self.thinking_agents = set()  # Set of agent names that are currently generating responses
+        self.thinking_animation_time = 0  # For blinking animation
+        
+        # Voice input indicator state
+        self.voice_detected_time = 0  # Timestamp when voice was last detected
+        self.voice_indicator_duration = 1.0  # How long to show "active" state (in seconds)
         
         input_box_x = int((1560 - 40 - 500) * 0.8)
         input_box_y = int(40 * 0.8)
@@ -454,7 +449,8 @@ class ChatGUI:
         
         # Next button will be positioned dynamically next to speech bubble
         # Create it initially, position will be updated when bubble is drawn
-        next_button_rect = pygame.Rect(0, 0, int(120 * 0.8), int(35 * 0.8))
+        # Make it wider to accommodate counter text like "Next Response (1/5)"
+        next_button_rect = pygame.Rect(0, 0, int(200 * 0.8), int(35 * 0.8))
         self.next_message_button = Button(
             next_button_rect.x, next_button_rect.y, next_button_rect.width, next_button_rect.height,
             "Next Response", self.manager
@@ -551,6 +547,10 @@ class ChatGUI:
     def draw(self, screen):
         screen.blit(self.background_image, (0, 0))
 
+        # Update thinking animation time
+        import time
+        self.thinking_animation_time = time.time()
+
         # Initialize current message index if needed
         if self.current_message_index < 0 and self.chat_history:
             # Find first agent message
@@ -564,9 +564,17 @@ class ChatGUI:
         self.create_advocate_button.draw(screen)
         self.select_advocate_button.draw(screen)
         
+        # Draw microphone indicator
+        self._draw_microphone_indicator(screen)
+        
         # Only draw next button if there are multiple messages in the latest round
         latest_round = self._get_latest_round_messages()
         if len(latest_round) > 1:
+            # Update button text to show current position and total
+            current_position = self.current_bubble_index_in_round + 1
+            total_responses = len(latest_round)
+            button_text = f"Next Response ({current_position}/{total_responses})"
+            self.next_message_button.button.set_text(button_text)
             self.next_message_button.draw(screen)
         
         screen.blit(self.checkbox_label, (int(40 * 0.8), int(40 * 0.8)))
@@ -604,7 +612,7 @@ class ChatGUI:
         # Assign positions to justices
         # Order: Top, Top-right, Bottom-right, Bottom-left, Top-left
         sprite_positions = {
-            "Jamie (Meritocracy)": positions[0],   # Top
+            "Jamie (Meritocracy)": positions[4],   # Top
             "Jordan (Rawlsian)": positions[1],      # Top-right
             "Amara (Restorative)": positions[2],   # Bottom-right
             "Sam (Utilitarian)": positions[3],     # Bottom-left
@@ -612,7 +620,7 @@ class ChatGUI:
         
         # Custom justice gets the 5th position (top-left)
         if agent_name == self.selected_custom_justice:
-            return positions[4]  # Top-left position
+            return positions[0]  # Top-left position
         
         return sprite_positions.get(agent_name)
 
@@ -620,16 +628,64 @@ class ChatGUI:
         # Draw default justices
         for checkbox in self.checkboxes:
             if checkbox.is_on:
+                sprite_pos = None
+                sprite_surface = None
+                
                 # Check if it's a default justice
                 if checkbox.label in self.sprites:
                     sprite_pos = self._get_sprite_pos(checkbox.label)
                     if sprite_pos:
-                        screen.blit(self.sprites[checkbox.label], sprite_pos)
+                        sprite_surface = self.sprites[checkbox.label]
                 # Check if it's the selected custom justice
                 elif checkbox.label == self.selected_custom_justice:
                     sprite_pos = self._get_sprite_pos(checkbox.label)
                     if sprite_pos:
-                        screen.blit(self.mystery_sprite, sprite_pos)
+                        sprite_surface = self.mystery_sprite
+                
+                # Draw sprite if found
+                if sprite_pos and sprite_surface:
+                    screen.blit(sprite_surface, sprite_pos)
+                    
+                    # Draw blinking border if agent is thinking
+                    if checkbox.label in self.thinking_agents:
+                        self._draw_thinking_border(screen, sprite_pos, sprite_surface)
+    
+    def _draw_thinking_border(self, screen, sprite_pos, sprite_surface):
+        """Draw a blinking border around a sprite to indicate thinking"""
+        # Calculate border rectangle around sprite
+        border_padding = int(5 * 0.8)
+        border_rect = pygame.Rect(
+            sprite_pos[0] - border_padding,
+            sprite_pos[1] - border_padding,
+            sprite_surface.get_width() + (border_padding * 2),
+            sprite_surface.get_height() + (border_padding * 2)
+        )
+        
+        # Blinking effect: oscillate between visible and semi-transparent
+        # Use sine wave for smooth blinking (blinks every ~1 second)
+        blink_speed = 3.0  # Speed of blinking
+        current_time = time.time()
+        alpha = int(128 + 127 * math.sin(current_time * blink_speed))
+        
+        # Create a surface for the border with alpha
+        border_surface = pygame.Surface((border_rect.width, border_rect.height), pygame.SRCALPHA)
+        
+        # Draw border (outline only, not filled)
+        border_color = (100, 200, 255, alpha)  # Light blue with alpha
+        border_width = int(3 * 0.8)
+        
+        # Draw border rectangle
+        pygame.draw.rect(border_surface, border_color, (0, 0, border_rect.width, border_rect.height), width=border_width, border_radius=int(5 * 0.8))
+        
+        # Blit the border surface onto the screen
+        screen.blit(border_surface, border_rect.topleft)
+    
+    def set_agent_thinking(self, agent_name, is_thinking):
+        """Mark an agent as thinking or not thinking"""
+        if is_thinking:
+            self.thinking_agents.add(agent_name)
+        else:
+            self.thinking_agents.discard(agent_name)
 
     def _get_latest_round_messages(self):
         """Get all agent messages from the most recent round (after last 'You:' message)"""
@@ -704,8 +760,14 @@ class ChatGUI:
                 # Position Next button at bottom right of the bubble (only if multiple bubbles)
                 latest_round = self._get_latest_round_messages()
                 if bubble_rect and len(latest_round) > 1:
+                    # Update button text with current position
+                    current_position = self.current_bubble_index_in_round + 1
+                    total_responses = len(latest_round)
+                    button_text = f"Next Response ({current_position}/{total_responses})"
+                    self.next_message_button.button.set_text(button_text)
+                    
                     self.next_message_button.button.set_relative_position((
-                        bubble_rect.right - int(130 * 0.8),  # Position at right edge
+                        bubble_rect.right - int(200 * 0.8),  # Position at right edge (wider button)
                         bubble_rect.bottom + int(10 * 0.8)  # Below the bubble
                     ))
                 elif len(latest_round) <= 1:
@@ -857,6 +919,59 @@ class ChatGUI:
         pygame.draw.polygon(screen, text_colour, tail_points, width=2)
         
         return bg_rect
+    
+    def _draw_microphone_indicator(self, screen):
+        """Draw a microphone icon below the textbox that flashes green when loud audio is detected"""
+        # Position below the textbox, centered
+        mic_size = int(30 * 0.8)
+        mic_x = self.main_input_box.rect.x + self.main_input_box.rect.width // 2 - mic_size // 2
+        mic_y = self.main_input_box.rect.bottom + int(15 * 0.8)
+        
+        # Get current audio level from speech recognizer
+        audio_level = 0.0
+        if self.speech_recognizer:
+            audio_level = self.speech_recognizer.get_audio_level()
+        
+        # Threshold for "loud" audio (adjust as needed, 0.05 = 5% of max volume)
+        loud_threshold = 0.05
+        
+        # Color: green when loud audio detected, gray when quiet
+        if audio_level > loud_threshold:
+            # Active state - green color (brightness based on audio level)
+            # Scale green intensity based on audio level
+            intensity = min(255, int(50 + (audio_level * 200)))
+            mic_color = (50, intensity, 50)  # Green when active, brighter = louder
+        else:
+            # Idle state - gray color
+            mic_color = (150, 150, 150)  # Gray when idle
+        
+        # Draw microphone icon (simple shape)
+        # Microphone body (rectangle)
+        body_width = int(mic_size * 0.4)
+        body_height = int(mic_size * 0.7)
+        body_x = mic_x + (mic_size - body_width) // 2
+        body_y = mic_y
+        pygame.draw.rect(screen, mic_color, (body_x, body_y, body_width, body_height), border_radius=3)
+        
+        # Microphone stand (base)
+        stand_width = int(mic_size * 0.6)
+        stand_height = int(mic_size * 0.15)
+        stand_x = mic_x + (mic_size - stand_width) // 2
+        stand_y = mic_y + body_height
+        pygame.draw.rect(screen, mic_color, (stand_x, stand_y, stand_width, stand_height), border_radius=2)
+        
+        # Microphone grille lines (optional detail)
+        for i in range(3):
+            line_y = body_y + int(body_height * (0.3 + i * 0.2))
+            pygame.draw.line(screen, mic_color, 
+                           (body_x + 2, line_y), 
+                           (body_x + body_width - 2, line_y), 
+                           width=1)
+    
+    def set_voice_detected(self):
+        """Call this when voice input is detected to update the indicator"""
+        import time
+        self.voice_detected_time = time.time()
 
 
 class AdvocateSelectionScreen:

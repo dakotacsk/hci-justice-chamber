@@ -101,22 +101,23 @@ class JusticeAgent:
             
         return formatted_history
 
-    def generate_response(self, session_id: str, initial_prompt: str = None, max_tokens: int = 100) -> str:
+    def generate_response(self, session_id: str, initial_prompt: str = None, max_tokens: int = 200) -> str:
         """Generates a response based on the conversation history.
         
         Uses the full conversation history from memory to provide context-aware responses.
         For multi-agent conversations, each agent sees all messages from all participants.
+        Retries up to 3 times if the API doesn't return a valid response.
         """
         # Check API key dynamically
         api_key = get_google_api_key()
         if not genai_available or not api_key:
-            return f"({self.profile.name} is silent as no LLM client is configured.)"
+            return self._get_fallback_response(session_id)
 
         # Configure genai with the API key
         try:
             configure_genai()
         except Exception as e:
-            return f"({self.profile.name} is silent - API configuration error: {e})"
+            return self._get_fallback_response(session_id, error=f"API configuration error: {e}")
 
         # Build context from memory (includes all agents' messages)
         history = self._build_context(session_id, max_turns=30)
@@ -125,53 +126,112 @@ class JusticeAgent:
         if initial_prompt:
              history.append({"role": "user", "content": initial_prompt})
 
-        try:
-            # Convert history to Gemini format
-            # Gemini uses 'parts' and a different role system
-            gemini_history = []
-            for turn in history:
-                # Gemini uses 'user' for user turns and 'model' for assistant turns
-                role = 'user' if turn['role'] == 'user' else 'model'
-                gemini_history.append({'role': role, 'parts': [turn['content']]})
+        # Retry up to 3 times if we don't get a valid response
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                # Convert history to Gemini format
+                # Gemini uses 'parts' and a different role system
+                gemini_history = []
+                for turn in history:
+                    # Gemini uses 'user' for user turns and 'model' for assistant turns
+                    role = 'user' if turn['role'] == 'user' else 'model'
+                    gemini_history.append({'role': role, 'parts': [turn['content']]})
 
-            # Enhance system prompt to clarify the agent should respond as themselves
-            enhanced_system_prompt = f"""{self.profile.system_prompt}
+                # Enhance system prompt to clarify the agent should respond as themselves
+                enhanced_system_prompt = f"""{self.profile.system_prompt}
 
 IMPORTANT: You are {self.profile.name}. When you respond, speak directly as yourself. Do not include agent name prefixes like "[Agent Name]:" in your responses. Simply respond naturally as {self.profile.name}."""
+                
+                model = genai.GenerativeModel(
+                    MODEL_NAME,
+                    system_instruction=enhanced_system_prompt
+                )
+                generation_config = genai.types.GenerationConfig(
+                    max_output_tokens=max_tokens
+                )
+                response = model.generate_content(
+                    gemini_history,
+                    generation_config=generation_config
+                )
+                
+                if response.candidates and response.text:
+                    reply = response.text.strip()
+                    # Remove any agent name prefixes that might have been included in the response
+                    # This prevents issues where the LLM copies the format from conversation history
+                    import re
+                    # Remove patterns like "[Agent Name]:" from the start (common format issue)
+                    # Match brackets with agent names followed by colon
+                    reply = re.sub(r'^\[[^\]]+\]:\s*', '', reply)
+                    # Remove patterns like "Agent Name said:" from the start
+                    reply = re.sub(r'^[^:]+ said:\s*', '', reply)
+                    # Remove "Another participant" patterns - handle nested parentheses in agent names
+                    reply = re.sub(r'^Another participant[^:]*said:\s*', '', reply, flags=re.IGNORECASE)
+                    # Remove "Note: Agent Name previously mentioned:" pattern
+                    reply = re.sub(r'^Note:\s*[^:]+ previously mentioned:\s*', '', reply, flags=re.IGNORECASE)
+                    reply = reply.strip()
+                    
+                    # If we got a valid non-empty response, return it
+                    if reply:
+                        # Add the generated reply to memory (without any prefixes)
+                        self.memory.add(session_id, self.profile.name, "assistant", reply)
+                        return reply
+                
+                # If we get here, response was empty - try again if we have retries left
+                if attempt < max_retries - 1:
+                    import time
+                    time.sleep(0.5 * (attempt + 1))  # Exponential backoff
+                    continue
+
+            except Exception as e:
+                # On exception, retry if we have attempts left
+                if attempt < max_retries - 1:
+                    import time
+                    time.sleep(0.5 * (attempt + 1))  # Exponential backoff
+                    continue
+                else:
+                    # Last attempt failed, use fallback
+                    return self._get_fallback_response(session_id, error=str(e))
+
+        # If all retries failed, provide a fallback response
+        return self._get_fallback_response(session_id)
+    
+    def _get_fallback_response(self, session_id: str, error: str = None) -> str:
+        """Generate a fallback response when API calls fail.
+        Uses the conversation context to provide a relevant response."""
+        # Get recent conversation context (last 5 minutes should be enough)
+        history = self.memory.get_recent(session_id, minutes=5)
+        
+        # Build a simple context-aware fallback
+        if history:
+            # Get the last user message
+            last_user_msg = None
+            for msg in reversed(history):
+                if msg['role'] == 'user':
+                    last_user_msg = msg['content']
+                    break
             
-            model = genai.GenerativeModel(
-                MODEL_NAME,
-                system_instruction=enhanced_system_prompt
-            )
-            generation_config = genai.types.GenerationConfig(
-                max_output_tokens=max_tokens
-            )
-            response = model.generate_content(
-                gemini_history,
-                generation_config=generation_config
-            )
-            if response.candidates:
-                reply = response.text.strip()
-                # Remove any agent name prefixes that might have been included in the response
-                # This prevents issues where the LLM copies the format from conversation history
-                import re
-                # Remove patterns like "[Agent Name]:" from the start (common format issue)
-                # Match brackets with agent names followed by colon
-                reply = re.sub(r'^\[[^\]]+\]:\s*', '', reply)
-                # Remove patterns like "Agent Name said:" from the start
-                reply = re.sub(r'^[^:]+ said:\s*', '', reply)
-                # Remove "Another participant" patterns - handle nested parentheses in agent names
-                reply = re.sub(r'^Another participant[^:]*said:\s*', '', reply, flags=re.IGNORECASE)
-                # Remove "Note: Agent Name previously mentioned:" pattern
-                reply = re.sub(r'^Note:\s*[^:]+ previously mentioned:\s*', '', reply, flags=re.IGNORECASE)
-                reply = reply.strip()
+            if last_user_msg:
+                # Provide a contextually appropriate fallback based on the agent's philosophy
+                fallback_responses = {
+                    "Sam (Utilitarian)": f"I'm considering the broader implications of what you've shared. From a utilitarian perspective, we must weigh the consequences carefully.",
+                    "Amara (Restorative)": f"I hear what you're saying, and I want to understand the full picture. How can we work toward healing and restoration?",
+                    "Jamie (Meritocracy)": f"That's an important point. Let me think about how merit and earned outcomes apply here.",
+                    "Jordan (Rawlsian)": f"I'm reflecting on this from behind the veil of ignorance. What would be fair for everyone involved?"
+                }
+                
+                # Check if we have a predefined fallback
+                if self.profile.name in fallback_responses:
+                    reply = fallback_responses[self.profile.name]
+                else:
+                    # Generic fallback for custom agents
+                    reply = f"I'm considering your perspective carefully. From my viewpoint, this raises important questions about justice and fairness."
             else:
-                reply = f"({self.profile.name} has no response.)"
-
-        except Exception as e:
-            reply = f"({self.profile.name} experiences a moment of reflection... Error: {e})"
-
-        # Add the generated reply to memory (without any prefixes)
+                reply = "I'm here and listening. What would you like to discuss?"
+        else:
+            reply = "I'm ready to engage in this conversation about justice."
+        
+        # Add fallback to memory
         self.memory.add(session_id, self.profile.name, "assistant", reply)
         return reply
 

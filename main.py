@@ -174,6 +174,7 @@ def main():
         SCREEN_HEIGHT,
         selected_advocate_key=selected_advocate_key,
         num_custom_advocates=len(all_custom_advocates),
+        speech_recognizer=speech,
     )
     creation_form = CreationForm(SCREEN_WIDTH, SCREEN_HEIGHT)
     advocate_selection_screen = AdvocateSelectionScreen(
@@ -199,6 +200,12 @@ def main():
             current_text = f"Heard: {new_speech}"
             print(f"Voice command: {new_speech}")
 
+            # Update microphone indicator to show voice was detected
+            chat_gui.set_voice_detected()
+
+            # Display speech input in the textbox
+            chat_gui.main_input_box.text = new_speech
+
             chat_gui.chat_history.append(f"You: {new_speech}")
             print(f"\nYou: {new_speech}")
 
@@ -221,19 +228,32 @@ def main():
             # Randomize the order of agents for responding
             random.shuffle(active_agents)
 
-            with concurrent.futures.ThreadPoolExecutor() as executor:
-                futures = {
-                    executor.submit(agent.generate_response, session_id): agent
-                    for agent in active_agents
-                }
-                for future in concurrent.futures.as_completed(futures):
-                    agent = futures[future]
-                    try:
-                        reply = future.result()
-                        chat_gui.chat_history.append(f"{agent.profile.name}: {reply}")
-                        print(f"{agent.profile.name}: {reply}")
-                    except Exception as exc:
-                        print(f"{agent.profile.name} generated an exception: {exc}")
+            # Process agents with rate limiting to avoid 429 errors
+            # Process in smaller batches with delays between batches
+            batch_size = 2  # Process 2 agents at a time
+            for i in range(0, len(active_agents), batch_size):
+                batch = active_agents[i:i + batch_size]
+                with concurrent.futures.ThreadPoolExecutor(max_workers=batch_size) as executor:
+                    # Mark agents as thinking when submitting
+                    for agent in batch:
+                        chat_gui.set_agent_thinking(agent.profile.name, True)
+                    
+                    futures = {executor.submit(agent.generate_response, session_id): agent for agent in batch}
+                    for future in concurrent.futures.as_completed(futures):
+                        agent = futures[future]
+                        try:
+                            reply = future.result()
+                            chat_gui.chat_history.append(f"{agent.profile.name}: {reply}")
+                            print(f"{agent.profile.name}: {reply}")
+                        except Exception as exc:
+                            print(f'{agent.profile.name} generated an exception: {exc}')
+                        finally:
+                            # Mark agent as done thinking
+                            chat_gui.set_agent_thinking(agent.profile.name, False)
+                
+                # Add a small delay between batches to avoid rate limiting
+                if i + batch_size < len(active_agents):
+                    time.sleep(0.5)  # 500ms delay between batches
 
             # Removed current_chat_index - using speech bubbles instead
 
@@ -275,24 +295,33 @@ def main():
                     # Randomize the order of agents for responding
                     random.shuffle(active_agents)
 
-                    with concurrent.futures.ThreadPoolExecutor() as executor:
-                        futures = {
-                            executor.submit(agent.generate_response, session_id): agent
-                            for agent in active_agents
-                        }
-                        for future in concurrent.futures.as_completed(futures):
-                            agent = futures[future]
-                            try:
-                                reply = future.result()
-                                chat_gui.chat_history.append(
-                                    f"{agent.profile.name}: {reply}"
-                                )
-                                print(f"{agent.profile.name}: {reply}")
-                            except Exception as exc:
-                                print(
-                                    f"{agent.profile.name} generated an exception: {exc}"
-                                )
-
+                    # Process agents with rate limiting to avoid 429 errors
+                    # Process in smaller batches with delays between batches
+                    batch_size = 2  # Process 2 agents at a time
+                    for i in range(0, len(active_agents), batch_size):
+                        batch = active_agents[i:i + batch_size]
+                        with concurrent.futures.ThreadPoolExecutor(max_workers=batch_size) as executor:
+                            # Mark agents as thinking when submitting
+                            for agent in batch:
+                                chat_gui.set_agent_thinking(agent.profile.name, True)
+                            
+                            futures = {executor.submit(agent.generate_response, session_id): agent for agent in batch}
+                            for future in concurrent.futures.as_completed(futures):
+                                agent = futures[future]
+                                try:
+                                    reply = future.result()
+                                    chat_gui.chat_history.append(f"{agent.profile.name}: {reply}")
+                                    print(f"{agent.profile.name}: {reply}")
+                                except Exception as exc:
+                                    print(f'{agent.profile.name} generated an exception: {exc}')
+                                finally:
+                                    # Mark agent as done thinking
+                                    chat_gui.set_agent_thinking(agent.profile.name, False)
+                        
+                        # Add a small delay between batches to avoid rate limiting
+                        if i + batch_size < len(active_agents):
+                            time.sleep(0.5)  # 500ms delay between batches
+                    
                     # Removed current_chat_index - using speech bubbles instead
 
             chat_gui.draw(screen)
@@ -332,6 +361,7 @@ def main():
                             SCREEN_HEIGHT,
                             selected_advocate_key=selected_advocate_key,
                             num_custom_advocates=len(all_custom_advocates),
+                            speech_recognizer=speech,
                         )
                         app_state = "CHAT"
                         break
@@ -367,6 +397,7 @@ def main():
                             SCREEN_HEIGHT,
                             selected_advocate_key=selected_advocate_key,
                             num_custom_advocates=len(all_custom_advocates),
+                            speech_recognizer=speech,
                         )
                 elif result:  # An advocate key was returned (only custom advocates now)
                     advocate_name = result
