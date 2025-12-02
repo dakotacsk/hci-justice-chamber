@@ -81,6 +81,36 @@ def load_all_custom_advocates() -> list[AgentProfile]:
             ))
     return advocates
 
+def delete_custom_advocate(advocate_name: str) -> bool:
+    """Deletes a custom advocate from the CSV file by name."""
+    if not os.path.isfile(CSV_FILE):
+        return False
+    
+    # Read all advocates
+    with open(CSV_FILE, 'r', newline='', encoding='utf-8') as f:
+        reader = csv.DictReader(f)
+        rows = list(reader)
+    
+    # Filter out the one to delete
+    original_count = len(rows)
+    rows = [row for row in rows if row['name'] != advocate_name]
+    
+    if len(rows) == original_count:
+        return False  # Advocate not found
+    
+    # Write back the remaining advocates
+    if rows:
+        with open(CSV_FILE, 'w', newline='', encoding='utf-8') as f:
+            writer = csv.DictWriter(f, fieldnames=rows[0].keys())
+            writer.writeheader()
+            writer.writerows(rows)
+    else:
+        # If no rows left, delete the file
+        os.remove(CSV_FILE)
+    
+    print(f"✅ Deleted advocate: {advocate_name}\n")
+    return True
+
 # MAIN APPLICATION
 
 import concurrent.futures
@@ -107,14 +137,27 @@ def main():
     agents = {key: JusticeAgent(profile) for key, profile in AGENTS.items()}
     all_custom_advocates = load_all_custom_advocates()
     
-    # Add custom advocates to the agents dictionary, using their name as key
-    for advocate_profile in all_custom_advocates:
-        agents[advocate_profile.name] = JusticeAgent(advocate_profile)
-
-    selected_advocate_key = None # To store the currently selected advocate
+    # Store default agents separately
+    default_agents = agents.copy()
+    
+    selected_advocate_key = None # To store the currently selected custom advocate (only one at a time)
+    
+    # Function to rebuild agents dict with selected custom advocate
+    def rebuild_agents():
+        new_agents = default_agents.copy()
+        if selected_advocate_key:
+            # Find and add the selected custom advocate
+            for advocate_profile in all_custom_advocates:
+                if advocate_profile.name == selected_advocate_key:
+                    new_agents[advocate_profile.name] = JusticeAgent(advocate_profile)
+                    break
+        return new_agents
+    
+    # Initial agents setup
+    agents = rebuild_agents()
     chat_gui = ChatGUI(agents, SCREEN_WIDTH, SCREEN_HEIGHT, selected_advocate_key=selected_advocate_key, num_custom_advocates=len(all_custom_advocates))
     creation_form = CreationForm(SCREEN_WIDTH, SCREEN_HEIGHT)
-    advocate_selection_screen = AdvocateSelectionScreen(SCREEN_WIDTH, SCREEN_HEIGHT, all_custom_advocates)
+    advocate_selection_screen = AdvocateSelectionScreen(SCREEN_WIDTH, SCREEN_HEIGHT, all_custom_advocates, default_agents)
 
     # Use a single session_id for the entire application session
     session_id = str(uuid.uuid4())
@@ -191,11 +234,15 @@ def main():
                         result['system_prompt'] = system_prompt
                         save_to_csv(result)
                         
-                        # Create and add the new agent
-                        new_profile = AgentProfile(name=result['name'], system_prompt=system_prompt)
-                        agents["custom"] = JusticeAgent(new_profile)
+                        # Reload custom advocates to include the new one
+                        all_custom_advocates = load_all_custom_advocates()
                         
-                        # Re-initialize the chat GUI with the new agent list
+                        # Automatically select the newly created advocate
+                        selected_advocate_key = result['name']
+                        
+                        # Rebuild agents and recreate screens
+                        agents = rebuild_agents()
+                        advocate_selection_screen = AdvocateSelectionScreen(SCREEN_WIDTH, SCREEN_HEIGHT, all_custom_advocates, default_agents)
                         chat_gui = ChatGUI(agents, SCREEN_WIDTH, SCREEN_HEIGHT, selected_advocate_key=selected_advocate_key, num_custom_advocates=len(all_custom_advocates))
                         app_state = "CHAT"
                         break
@@ -208,10 +255,26 @@ def main():
                 if result == "back":
                     app_state = "CHAT"
                     break
-                elif result: # An advocate key was returned
-                    selected_advocate_key = result
-                    print(f"Selected advocate: {selected_advocate_key}")
-                    # Re-initialize chat_gui with the newly selected advocate
+                elif isinstance(result, tuple) and result[0] == "delete":
+                    # Handle deletion
+                    advocate_name = result[1]
+                    if delete_custom_advocate(advocate_name):
+                        # Reload custom advocates
+                        all_custom_advocates = load_all_custom_advocates()
+                        # If deleted advocate was selected, clear selection
+                        if selected_advocate_key == advocate_name:
+                            selected_advocate_key = None
+                        # Rebuild agents and recreate screens
+                        agents = rebuild_agents()
+                        advocate_selection_screen = AdvocateSelectionScreen(SCREEN_WIDTH, SCREEN_HEIGHT, all_custom_advocates, default_agents)
+                        chat_gui = ChatGUI(agents, SCREEN_WIDTH, SCREEN_HEIGHT, selected_advocate_key=selected_advocate_key, num_custom_advocates=len(all_custom_advocates))
+                elif result: # An advocate key was returned (only custom advocates now)
+                    advocate_name = result
+                    # All results from selection screen are custom advocates
+                    selected_advocate_key = advocate_name
+                    print(f"Selected custom advocate: {selected_advocate_key}")
+                    # Rebuild agents and recreate chat_gui
+                    agents = rebuild_agents()
                     chat_gui = ChatGUI(agents, SCREEN_WIDTH, SCREEN_HEIGHT, selected_advocate_key=selected_advocate_key, num_custom_advocates=len(all_custom_advocates))
                     app_state = "CHAT"
                     break

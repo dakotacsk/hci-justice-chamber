@@ -357,7 +357,7 @@ class ChatGUI:
         )
         # Removed dialogue_box_rect - using speech bubbles instead
 
-        # Sprites
+        # Sprites - load default justices
         self.sprites = {
             "Sam (Utilitarian)": pygame.transform.scale(
                 pygame.image.load("resources/sprites/utilitarian.png").convert_alpha(),
@@ -376,6 +376,15 @@ class ChatGUI:
                 (int(60 * 0.8), int(100 * 0.8)),
             ),
         }
+        
+        # Load mystery justice sprite for custom justices
+        self.mystery_sprite = pygame.transform.scale(
+            pygame.image.load("resources/sprites/mystery_justice.png").convert_alpha(),
+            (int(60 * 0.8), int(100 * 0.8)),
+        )
+        
+        # Track which custom justice is currently selected (only one at a time)
+        self.selected_custom_justice = selected_advocate_key if selected_advocate_key and selected_advocate_key not in ["Sam (Utilitarian)", "Amara (Restorative)", "Jamie (Meritocracy)", "Jordan (Rawlsian)"] else None
 
         # State & UI
         self.font = pygame.font.Font("resources/roboto_fonts/Roboto-Regular.ttf", int(24 * 0.8))
@@ -414,14 +423,26 @@ class ChatGUI:
         )
         
         create_rect = pygame.Rect(
-            self.screen_width - int(220 * 0.8),
+            self.screen_width - int(440 * 0.8),
             self.screen_height - int(60 * 0.8),
-            int(200 * 0.8),
+            int(400 * 0.8),
             int(40 * 0.8)
         )
         self.create_advocate_button = Button(
             create_rect.x, create_rect.y, create_rect.width, create_rect.height,
-            "Create Advocate", self.manager
+            "Create custom Justice Advocate", self.manager
+        )
+        
+        # Add button to select/manage advocates
+        select_rect = pygame.Rect(
+            self.screen_width - int(440 * 0.8),
+            self.screen_height - int(110 * 0.8),
+            int(400 * 0.8),
+            int(40 * 0.8)
+        )
+        self.select_advocate_button = Button(
+            select_rect.x, select_rect.y, select_rect.width, select_rect.height,
+            "Select a custom Justice Advocate", self.manager, color=(100, 150, 200)
         )
         
         # Removed prev/next buttons - not needed with speech bubbles
@@ -462,6 +483,10 @@ class ChatGUI:
         # Handle next button for cycling through messages
         if self.next_message_button.is_clicked(event):
             self._next_message()
+        
+        # Handle select advocate button
+        if self.select_advocate_button.is_clicked(event):
+            return "select_advocate"
         
         # Handle scroll wheel for speech bubble scrolling
         if event.type == pygame.MOUSEWHEEL:
@@ -537,7 +562,12 @@ class ChatGUI:
         self.main_input_box.draw(screen)
         self.submit_button.draw(screen)
         self.create_advocate_button.draw(screen)
-        self.next_message_button.draw(screen)
+        self.select_advocate_button.draw(screen)
+        
+        # Only draw next button if there are multiple messages in the latest round
+        latest_round = self._get_latest_round_messages()
+        if len(latest_round) > 1:
+            self.next_message_button.draw(screen)
         
         screen.blit(self.checkbox_label, (int(40 * 0.8), int(40 * 0.8)))
         for checkbox in self.checkboxes:
@@ -552,20 +582,54 @@ class ChatGUI:
         self.manager.draw_ui(screen)
 
     def _get_sprite_pos(self, agent_name):
+        # Position justices in a pentagon formation around the table
+        # Table center is at screen center - no scaling applied to center
+        import math
+        
+        # Use actual screen center, not scaled
+        center_x = self.screen_width // 2   # Screen center X (624 for 1248px screen)
+        center_y = self.screen_height // 2   # Screen center Y (351 for 702px screen)
+        radius = int(120 * 0.8)              # Smaller radius to bring them closer together
+        
+        # Calculate pentagon positions (5 vertices evenly spaced around a circle)
+        # Start at top and go clockwise
+        # Angle offset: -90 degrees to start at top, then add 72 degrees per vertex (360/5 = 72)
+        positions = []
+        for i in range(5):
+            angle = math.radians(-90 + i * 72)  # Start at top, go clockwise
+            x = center_x + radius * math.cos(angle)
+            y = center_y + radius * math.sin(angle)
+            positions.append((int(x), int(y)))
+        
+        # Assign positions to justices
+        # Order: Top, Top-right, Bottom-right, Bottom-left, Top-left
         sprite_positions = {
-            "Sam (Utilitarian)": (int(760 * 0.8), int(530 * 0.8)),
-            "Amara (Restorative)": (int(860 * 0.8), int(415 * 0.8)),
-            "Jamie (Meritocracy)": (int(650 * 0.8), int(415 * 0.8)),
-            "Jordan (Rawlsian)": (int(760 * 0.8), int(305 * 0.8)),
+            "Jamie (Meritocracy)": positions[0],   # Top
+            "Jordan (Rawlsian)": positions[1],      # Top-right
+            "Amara (Restorative)": positions[2],   # Bottom-right
+            "Sam (Utilitarian)": positions[3],     # Bottom-left
         }
+        
+        # Custom justice gets the 5th position (top-left)
+        if agent_name == self.selected_custom_justice:
+            return positions[4]  # Top-left position
+        
         return sprite_positions.get(agent_name)
 
     def _draw_sprites(self, screen):
+        # Draw default justices
         for checkbox in self.checkboxes:
-            if checkbox.is_on and checkbox.label in self.sprites:
-                sprite_pos = self._get_sprite_pos(checkbox.label)
-                if sprite_pos:
-                    screen.blit(self.sprites[checkbox.label], sprite_pos)
+            if checkbox.is_on:
+                # Check if it's a default justice
+                if checkbox.label in self.sprites:
+                    sprite_pos = self._get_sprite_pos(checkbox.label)
+                    if sprite_pos:
+                        screen.blit(self.sprites[checkbox.label], sprite_pos)
+                # Check if it's the selected custom justice
+                elif checkbox.label == self.selected_custom_justice:
+                    sprite_pos = self._get_sprite_pos(checkbox.label)
+                    if sprite_pos:
+                        screen.blit(self.mystery_sprite, sprite_pos)
 
     def _get_latest_round_messages(self):
         """Get all agent messages from the most recent round (after last 'You:' message)"""
@@ -637,12 +701,16 @@ class ChatGUI:
                     speaker  # Pass speaker name for scrollbar tracking
                 )
                 
-                # Position Next button at bottom right of the bubble
-                if bubble_rect:
+                # Position Next button at bottom right of the bubble (only if multiple bubbles)
+                latest_round = self._get_latest_round_messages()
+                if bubble_rect and len(latest_round) > 1:
                     self.next_message_button.button.set_relative_position((
                         bubble_rect.right - int(130 * 0.8),  # Position at right edge
                         bubble_rect.bottom + int(10 * 0.8)  # Below the bubble
                     ))
+                elif len(latest_round) <= 1:
+                    # Hide button if only one message (position off-screen)
+                    self.next_message_button.button.set_relative_position((self.screen_width, self.screen_height))
         
         # Clean up scrollbars for speakers not currently displayed
         current_speaker = parts[0].strip() if len(parts) == 2 else None
@@ -792,70 +860,144 @@ class ChatGUI:
 
 
 class AdvocateSelectionScreen:
-    def __init__(self, screen_width, screen_height, custom_advocates):
+    def __init__(self, screen_width, screen_height, custom_advocates, default_agents=None):
         self.screen_width = screen_width
         self.screen_height = screen_height
         self.manager = pygame_gui.UIManager((screen_width, screen_height))
         self.custom_advocates = custom_advocates
+        self.default_agents = default_agents or {}  # Keep for reference but don't display
         
         self.font_title = pygame.font.Font("resources/roboto_fonts/Roboto-Bold.ttf", int(48 * 0.8))
         self.font_label = pygame.font.Font("resources/roboto_fonts/Roboto-Regular.ttf", int(32 * 0.8))
+        self.font_small = pygame.font.Font("resources/roboto_fonts/Roboto-Regular.ttf", int(24 * 0.8))
         
-        # Create buttons for each advocate
+        # Scrollable area
+        self.scroll_offset = 0
+        self.scroll_speed = 50
+        self.item_height = int(70 * 0.8)
+        self.visible_items = int((screen_height - int(200 * 0.8)) / self.item_height)
+        
+        # Create buttons ONLY for custom advocates (not default justices)
         self.advocate_buttons = []
-        start_y = int(150 * 0.8)
+        self.delete_buttons = []  # Only for custom advocates
+        self.start_y = int(150 * 0.8)
         button_height = int(50 * 0.8)
         button_width = int(400 * 0.8)
+        delete_button_width = int(100 * 0.8)
         y_padding = int(70 * 0.8)
         
+        # Add ONLY custom advocates (no default justices)
         for i, advocate in enumerate(custom_advocates):
+            y_pos = self.start_y + i * y_padding
             button_rect = pygame.Rect(
                 self.screen_width / 2 - button_width / 2,
-                start_y + i * y_padding,
+                y_pos,
                 button_width,
                 button_height
             )
             button = Button(
                 button_rect.x, button_rect.y, button_rect.width, button_rect.height,
-                advocate.name, self.manager
+                advocate.name, self.manager, color=(100, 150, 200)
             )
-            button.advocate_name = advocate.name  # Store name for identification
+            button.advocate_name = advocate.name
+            button.is_custom = True
             self.advocate_buttons.append(button)
+            
+            # Add delete button for custom advocates
+            delete_rect = pygame.Rect(
+                button_rect.right + int(10 * 0.8),
+                y_pos,
+                delete_button_width,
+                button_height
+            )
+            delete_button = Button(
+                delete_rect.x, delete_rect.y, delete_rect.width, delete_rect.height,
+                "Delete", self.manager, color=(200, 50, 50)
+            )
+            delete_button.advocate_name = advocate.name
+            self.delete_buttons.append(delete_button)
         
-        # Back button
+        # Back button - match create advocate page style
         back_rect = pygame.Rect(
             int(20 * 0.8),
             int(20 * 0.8),
-            int(100 * 0.8),
+            int(40 * 0.8),
             int(40 * 0.8)
         )
         self.back_button = Button(
             back_rect.x, back_rect.y, back_rect.width, back_rect.height,
-            "Back", self.manager
+            "<", self.manager
         )
 
     def handle_event(self, event):
         self.manager.process_events(event)
         
+        # Handle scrolling
+        if event.type == pygame.MOUSEWHEEL:
+            max_scroll = max(0, len(self.advocate_buttons) * self.item_height - (self.screen_height - int(200 * 0.8)))
+            self.scroll_offset = max(0, min(self.scroll_offset - event.y * self.scroll_speed, max_scroll))
+            # Update button positions based on scroll
+            self._update_button_positions()
+        
         if self.back_button.is_clicked(event):
             return "back"
         
+        # Check delete buttons first
+        for delete_button in self.delete_buttons:
+            if delete_button.is_clicked(event):
+                return ("delete", delete_button.advocate_name)
+        
+        # Check selection buttons
         for button in self.advocate_buttons:
             if button.is_clicked(event):
                 return button.advocate_name
         
         return None
+    
+    def _update_button_positions(self):
+        """Update button positions based on scroll offset."""
+        y_padding = int(70 * 0.8)
+        
+        for i, button in enumerate(self.advocate_buttons):
+            y_pos = self.start_y + i * y_padding - self.scroll_offset
+            button.rect.y = y_pos
+            button.button.set_position((button.rect.x, y_pos))
+        
+        # Update delete button positions
+        for i, delete_button in enumerate(self.delete_buttons):
+            y_pos = self.start_y + i * y_padding - self.scroll_offset
+            delete_button.rect.y = y_pos
+            delete_button.button.set_position((delete_button.rect.x, y_pos))
 
     def draw(self, screen):
-        screen.fill((255, 255, 255))  # White background
+        # Match create advocate page aesthetic - dark blue background
+        screen.fill((20, 20, 40))  # Dark blue background
         
         title_surface = self.font_title.render(
-            "Select an Advocate", True, (20, 20, 20)  # Black text
+            "Select a Custom Justice", True, (255, 255, 255)  # White text
         )
         screen.blit(title_surface, (self.screen_width / 2 - title_surface.get_width() / 2, int(50 * 0.8)))
         
+        # Show message if no custom advocates
+        if not self.custom_advocates:
+            no_advocates_label = self.font_label.render(
+                "No custom justices created yet.", True, (255, 255, 255)
+            )
+            screen.blit(no_advocates_label, (self.screen_width / 2 - no_advocates_label.get_width() / 2, self.start_y))
+        
+        # Draw scrollable area
+        clip_rect = pygame.Rect(0, int(120 * 0.8), self.screen_width, self.screen_height - int(120 * 0.8))
+        screen.set_clip(clip_rect)
+        
         for button in self.advocate_buttons:
-            button.draw(screen)
+            if button.rect.bottom >= clip_rect.top and button.rect.top <= clip_rect.bottom:
+                button.draw(screen)
+        
+        for delete_button in self.delete_buttons:
+            if delete_button.rect.bottom >= clip_rect.top and delete_button.rect.top <= clip_rect.bottom:
+                delete_button.draw(screen)
+        
+        screen.set_clip(None)
         
         self.back_button.draw(screen)
         
