@@ -51,26 +51,62 @@ class JusticeAgent:
                     return None
         return None
 
-    def _build_context(self, session_id: str) -> list[dict]:
-        """Builds a structured history for the LLM prompt."""
+    def _build_context(self, session_id: str, max_turns: int = 30) -> list[dict]:
+        """Builds a structured history for the LLM prompt.
+        
+        Args:
+            session_id: The session identifier
+            max_turns: Maximum number of conversation turns to include (default: 30)
+                      If history exceeds this, older messages are truncated while
+                      preserving recent context.
+        """
         history = self.memory.get_recent(session_id)
         
-        # Limit history to the last 2 turns
-        recent_history = history[-2:]
+        # If history is too long, truncate while preserving recent context
+        # Keep the most recent max_turns messages
+        if len(history) > max_turns:
+            # Keep first message (if exists) for context, then recent messages
+            # This helps maintain conversation flow
+            if len(history) > max_turns + 1:
+                # Keep first message and last max_turns-1 messages
+                recent_history = [history[0]] + history[-(max_turns-1):]
+            else:
+                recent_history = history[-max_turns:]
+        else:
+            recent_history = history
         
         # Format for Gemini/OpenAI API
         formatted_history = []
         for m in recent_history:
-            # Gemini uses 'user' and 'model', OpenAI uses 'user' and 'assistant'
+            # Gemini uses 'user' for user turns and 'model' for assistant turns
             role = 'assistant' if m['role'] == 'assistant' else 'user'
-            # Prepend agent name for clarity in the context
-            content = f"[{m['agent']}]: {m['content']}"
+            
+            # Format content based on role
+            if m['role'] == 'user':
+                # User messages: just the content
+                content = m['content']
+            else:
+                # Agent messages: format clearly to show who said what
+                # Use a format that's clear but doesn't encourage copying
+                if m['agent'] == self.profile.name:
+                    # For the current agent's own messages, just use the content
+                    # (they know it's from them)
+                    content = m['content']
+                else:
+                    # For other agents, use a format that distinguishes speakers
+                    # but is less likely to be copied verbatim
+                    content = f"Note: {m['agent']} previously mentioned: {m['content']}"
+            
             formatted_history.append({"role": role, "content": content})
             
         return formatted_history
 
     def generate_response(self, session_id: str, initial_prompt: str = None, max_tokens: int = 100) -> str:
-        """Generates a response based on the conversation history."""
+        """Generates a response based on the conversation history.
+        
+        Uses the full conversation history from memory to provide context-aware responses.
+        For multi-agent conversations, each agent sees all messages from all participants.
+        """
         # Check API key dynamically
         api_key = get_google_api_key()
         if not genai_available or not api_key:
@@ -82,23 +118,30 @@ class JusticeAgent:
         except Exception as e:
             return f"({self.profile.name} is silent - API configuration error: {e})"
 
-        history = self._build_context(session_id)
+        # Build context from memory (includes all agents' messages)
+        history = self._build_context(session_id, max_turns=30)
         
         # If there's an initial prompt (like the user's first message), add it
         if initial_prompt:
-             history.append({"role": "user", "content": f"[User]: {initial_prompt}"})
+             history.append({"role": "user", "content": initial_prompt})
 
         try:
+            # Convert history to Gemini format
             # Gemini uses 'parts' and a different role system
             gemini_history = []
             for turn in history:
-                # Gemini uses 'user' for user turns and 'model' for its own turns
+                # Gemini uses 'user' for user turns and 'model' for assistant turns
                 role = 'user' if turn['role'] == 'user' else 'model'
                 gemini_history.append({'role': role, 'parts': [turn['content']]})
 
+            # Enhance system prompt to clarify the agent should respond as themselves
+            enhanced_system_prompt = f"""{self.profile.system_prompt}
+
+IMPORTANT: You are {self.profile.name}. When you respond, speak directly as yourself. Do not include agent name prefixes like "[Agent Name]:" in your responses. Simply respond naturally as {self.profile.name}."""
+            
             model = genai.GenerativeModel(
                 MODEL_NAME,
-                system_instruction=self.profile.system_prompt
+                system_instruction=enhanced_system_prompt
             )
             generation_config = genai.types.GenerationConfig(
                 max_output_tokens=max_tokens
@@ -109,15 +152,29 @@ class JusticeAgent:
             )
             if response.candidates:
                 reply = response.text.strip()
+                # Remove any agent name prefixes that might have been included in the response
+                # This prevents issues where the LLM copies the format from conversation history
+                import re
+                # Remove patterns like "[Agent Name]:" from the start (common format issue)
+                # Match brackets with agent names followed by colon
+                reply = re.sub(r'^\[[^\]]+\]:\s*', '', reply)
+                # Remove patterns like "Agent Name said:" from the start
+                reply = re.sub(r'^[^:]+ said:\s*', '', reply)
+                # Remove "Another participant" patterns - handle nested parentheses in agent names
+                reply = re.sub(r'^Another participant[^:]*said:\s*', '', reply, flags=re.IGNORECASE)
+                # Remove "Note: Agent Name previously mentioned:" pattern
+                reply = re.sub(r'^Note:\s*[^:]+ previously mentioned:\s*', '', reply, flags=re.IGNORECASE)
+                reply = reply.strip()
             else:
                 reply = f"({self.profile.name} has no response.)"
 
         except Exception as e:
             reply = f"({self.profile.name} experiences a moment of reflection... Error: {e})"
 
-        # Add the generated reply to memory
+        # Add the generated reply to memory (without any prefixes)
         self.memory.add(session_id, self.profile.name, "assistant", reply)
         return reply
 
     def end_session(self, session_id: str):
+        """Ends a chat session and cleans up resources."""
         self.memory.delete_session(session_id)

@@ -116,6 +116,10 @@ def main():
     creation_form = CreationForm(SCREEN_WIDTH, SCREEN_HEIGHT)
     advocate_selection_screen = AdvocateSelectionScreen(SCREEN_WIDTH, SCREEN_HEIGHT, all_custom_advocates)
 
+    # Use a single session_id for the entire application session
+    session_id = str(uuid.uuid4())
+    print(f"Session started with ID: {session_id}")
+
     app_state = "CHAT"
 
     # Main Loop
@@ -150,7 +154,7 @@ def main():
                         print("No agents are active.")
                         continue
 
-                    session_id = str(uuid.uuid4())
+                    # Use the same session_id for the entire session
                     for agent in active_agents:
                         agent.memory.add(session_id, "User", "user", user_input)
 
