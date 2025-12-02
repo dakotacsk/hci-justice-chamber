@@ -1,3 +1,5 @@
-langchain-google-genai
+pip langchain-google-genai
 pygame
+pyaudio
+vosk
 google-generativeai
