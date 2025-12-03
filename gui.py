@@ -657,6 +657,10 @@ class ChatGUI:
                     # Draw blinking border if agent is thinking
                     if checkbox.label in self.thinking_agents:
                         self._draw_thinking_border(screen, sprite_pos, sprite_surface)
+                    
+                    # Draw "!" bubble if agent has a ready response that's not currently displayed
+                    if self._agent_has_ready_response(checkbox.label):
+                        self._draw_exclamation_bubble(screen, sprite_pos)
     
     def _draw_thinking_border(self, screen, sprite_pos, sprite_surface):
         """Draw a blinking border around a sprite to indicate thinking"""
@@ -687,6 +691,66 @@ class ChatGUI:
         
         # Blit the border surface onto the screen
         screen.blit(border_surface, border_rect.topleft)
+    
+    def _agent_has_ready_response(self, agent_name):
+        """Check if an agent has a response ready but not currently displayed"""
+        latest_round = self._get_latest_round_messages()
+        if not latest_round:
+            return False
+        
+        # Check if this agent has a message in the latest round
+        for msg in latest_round:
+            parts = msg.split(":", 1)
+            if len(parts) == 2:
+                speaker = parts[0].strip()
+                if speaker == agent_name:
+                    # Check if this is the currently displayed message
+                    if self.current_bubble_index_in_round < len(latest_round):
+                        current_msg = latest_round[self.current_bubble_index_in_round]
+                        if current_msg == msg:
+                            # This is the currently displayed message, don't show "!"
+                            return False
+                    # Agent has a ready response that's not currently displayed
+                    return True
+        
+        return False
+    
+    def _draw_exclamation_bubble(self, screen, sprite_pos):
+        """Draw a small speech bubble with '!' above a sprite - positioned where the actual speech bubble will appear"""
+        # Position bubble at the same location as the actual speech bubble will be
+        # This ensures the actual speech bubble will cover it when displayed
+        bubble_size = int(40 * 0.8)
+        bubble_x = sprite_pos[0] + int(30 * 0.8)  # Center above sprite (same as speech bubble)
+        tail_bottom_y = sprite_pos[1] - int(20 * 0.8)  # Where tail points to (same as speech bubble)
+        
+        # Position bubble so the tail comes from the bottom, with "!" clearly above it
+        bubble_rect = pygame.Rect(
+            bubble_x - bubble_size // 2,
+            tail_bottom_y - bubble_size - int(8 * 0.8),  # Position bubble above tail point
+            bubble_size,
+            bubble_size
+        )
+        
+        # Draw bubble background (white)
+        pygame.draw.ellipse(screen, (255, 255, 255), bubble_rect)
+        pygame.draw.ellipse(screen, (0, 0, 0), bubble_rect, width=2)
+        
+        # Draw "!" text centered in the middle of the bubble
+        exclamation_font = pygame.font.Font("resources/roboto_fonts/Roboto-Bold.ttf", int(24 * 0.8))
+        exclamation_surface = exclamation_font.render("!", True, (0, 0, 0))
+        exclamation_x = bubble_rect.centerx - exclamation_surface.get_width() // 2
+        # Position "!" in the center of the bubble
+        exclamation_y = bubble_rect.centery - exclamation_surface.get_height() // 2
+        screen.blit(exclamation_surface, (exclamation_x, exclamation_y))
+        
+        # Draw small tail pointing down from bottom of bubble to character
+        tail_points = [
+            (bubble_rect.centerx, bubble_rect.bottom),  # Top of tail (bottom of bubble)
+            (sprite_pos[0] + int(30 * 0.8) - 5, tail_bottom_y),  # Bottom left of tail
+            (sprite_pos[0] + int(30 * 0.8) + 5, tail_bottom_y)   # Bottom right of tail
+        ]
+        pygame.draw.polygon(screen, (255, 255, 255), tail_points)
+        pygame.draw.polygon(screen, (0, 0, 0), tail_points, width=2)
     
     def set_agent_thinking(self, agent_name, is_thinking):
         """Mark an agent as thinking or not thinking"""
