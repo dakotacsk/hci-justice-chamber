@@ -392,6 +392,8 @@ class ChatGUI:
         # Voice input indicator state
         self.voice_detected_time = 0  # Timestamp when voice was last detected
         self.voice_indicator_duration = 1.0  # How long to show "active" state (in seconds)
+        self.voice_mode_active = True  # Track whether voice mode is active
+        self.mic_rect = None  # Store microphone rect for click detection
         
         input_box_x = int((1560 - 40 - 500) * 0.8)
         input_box_y = int(40 * 0.8)
@@ -483,6 +485,12 @@ class ChatGUI:
         # Handle select advocate button
         if self.select_advocate_button.is_clicked(event):
             return "select_advocate"
+        
+        # Handle microphone button click
+        if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+            if self.mic_rect and self.mic_rect.collidepoint(event.pos):
+                self.voice_mode_active = not self.voice_mode_active
+                return "mic_toggled"
         
         # Handle scroll wheel for speech bubble scrolling
         if event.type == pygame.MOUSEWHEEL:
@@ -921,29 +929,42 @@ class ChatGUI:
         return bg_rect
     
     def _draw_microphone_indicator(self, screen):
-        """Draw a microphone icon below the textbox that flashes green when loud audio is detected"""
+        """Draw a microphone icon below the textbox that flashes green when loud audio is detected, red when voice mode is off"""
         # Position below the textbox, centered
         mic_size = int(30 * 0.8)
         mic_x = self.main_input_box.rect.x + self.main_input_box.rect.width // 2 - mic_size // 2
         mic_y = self.main_input_box.rect.bottom + int(15 * 0.8)
         
-        # Get current audio level from speech recognizer
-        audio_level = 0.0
-        if self.speech_recognizer:
-            audio_level = self.speech_recognizer.get_audio_level()
+        # Store rect for click detection (make it slightly larger for easier clicking)
+        click_padding = int(10 * 0.8)
+        self.mic_rect = pygame.Rect(
+            mic_x - click_padding,
+            mic_y - click_padding,
+            mic_size + (click_padding * 2),
+            mic_size + (click_padding * 2)
+        )
         
-        # Threshold for "loud" audio (adjust as needed, 0.05 = 5% of max volume)
-        loud_threshold = 0.05
-        
-        # Color: green when loud audio detected, gray when quiet
-        if audio_level > loud_threshold:
-            # Active state - green color (brightness based on audio level)
-            # Scale green intensity based on audio level
-            intensity = min(255, int(50 + (audio_level * 200)))
-            mic_color = (50, intensity, 50)  # Green when active, brighter = louder
+        # If voice mode is inactive, show red
+        if not self.voice_mode_active:
+            mic_color = (200, 50, 50)  # Red when voice mode is deactivated
         else:
-            # Idle state - gray color
-            mic_color = (150, 150, 150)  # Gray when idle
+            # Get current audio level from speech recognizer
+            audio_level = 0.0
+            if self.speech_recognizer:
+                audio_level = self.speech_recognizer.get_audio_level()
+            
+            # Threshold for "loud" audio (adjust as needed, 0.05 = 5% of max volume)
+            loud_threshold = 0.05
+            
+            # Color: green when loud audio detected, gray when quiet
+            if audio_level > loud_threshold:
+                # Active state - green color (brightness based on audio level)
+                # Scale green intensity based on audio level
+                intensity = min(255, int(50 + (audio_level * 200)))
+                mic_color = (50, intensity, 50)  # Green when active, brighter = louder
+            else:
+                # Idle state - gray color
+                mic_color = (150, 150, 150)  # Gray when idle
         
         # Draw microphone icon (simple shape)
         # Microphone body (rectangle)
@@ -972,6 +993,10 @@ class ChatGUI:
         """Call this when voice input is detected to update the indicator"""
         import time
         self.voice_detected_time = time.time()
+    
+    def is_voice_mode_active(self):
+        """Check if voice mode is currently active"""
+        return self.voice_mode_active
 
 
 class AdvocateSelectionScreen:

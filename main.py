@@ -195,67 +195,69 @@ def main():
             if event.type == pygame.QUIT:
                 running = False
 
-        new_speech = speech.get_latest_text()
-        if new_speech:
-            current_text = f"Heard: {new_speech}"
-            print(f"Voice command: {new_speech}")
+        # Only process voice input if voice mode is active
+        if chat_gui.is_voice_mode_active():
+            new_speech = speech.get_latest_text()
+            if new_speech:
+                current_text = f"Heard: {new_speech}"
+                print(f"Voice command: {new_speech}")
 
-            # Update microphone indicator to show voice was detected
-            chat_gui.set_voice_detected()
+                # Update microphone indicator to show voice was detected
+                chat_gui.set_voice_detected()
 
-            # Display speech input in the textbox
-            chat_gui.main_input_box.text = new_speech
+                # Display speech input in the textbox
+                chat_gui.main_input_box.text = new_speech
 
-            chat_gui.chat_history.append(f"You: {new_speech}")
-            print(f"\nYou: {new_speech}")
+                chat_gui.chat_history.append(f"You: {new_speech}")
+                print(f"\nYou: {new_speech}")
 
-            active_agents = [
-                agent
-                for agent, checkbox in zip(
-                    chat_gui.agents.values(), chat_gui.checkboxes
-                )
-                if checkbox.is_on
-            ]
-            if not active_agents:
-                chat_gui.chat_history.append("No agents are active.")
-                print("No agents are active.")
-                continue
+                active_agents = [
+                    agent
+                    for agent, checkbox in zip(
+                        chat_gui.agents.values(), chat_gui.checkboxes
+                    )
+                    if checkbox.is_on
+                ]
+                if not active_agents:
+                    chat_gui.chat_history.append("No agents are active.")
+                    print("No agents are active.")
+                    continue
 
-            # Use the same session_id for the entire session
-            for agent in active_agents:
-                agent.memory.add(session_id, "User", "user", new_speech)
+                # Use the same session_id for the entire session
+                for agent in active_agents:
+                    agent.memory.add(session_id, "User", "user", new_speech)
 
-            # Randomize the order of agents for responding
-            random.shuffle(active_agents)
+                # Randomize the order of agents for responding
+                random.shuffle(active_agents)
 
-            # Process agents with rate limiting to avoid 429 errors
-            # Process in smaller batches with delays between batches
-            batch_size = 2  # Process 2 agents at a time
-            for i in range(0, len(active_agents), batch_size):
-                batch = active_agents[i:i + batch_size]
-                with concurrent.futures.ThreadPoolExecutor(max_workers=batch_size) as executor:
-                    # Mark agents as thinking when submitting
-                    for agent in batch:
-                        chat_gui.set_agent_thinking(agent.profile.name, True)
+                # Process agents with rate limiting to avoid 429 errors
+                # Process in smaller batches with delays between batches
+                batch_size = 2  # Process 2 agents at a time
+                for i in range(0, len(active_agents), batch_size):
+                    batch = active_agents[i:i + batch_size]
+                    with concurrent.futures.ThreadPoolExecutor(max_workers=batch_size) as executor:
+                        # Mark agents as thinking when submitting
+                        for agent in batch:
+                            chat_gui.set_agent_thinking(agent.profile.name, True)
+                        
+                        futures = {executor.submit(agent.generate_response, session_id): agent for agent in batch}
+                        for future in concurrent.futures.as_completed(futures):
+                            agent = futures[future]
+                            try:
+                                reply = future.result()
+                                chat_gui.chat_history.append(f"{agent.profile.name}: {reply}")
+                                print(f"{agent.profile.name}: {reply}")
+                            except Exception as exc:
+                                print(f'{agent.profile.name} generated an exception: {exc}')
+                            finally:
+                                # Mark agent as done thinking
+                                chat_gui.set_agent_thinking(agent.profile.name, False)
                     
-                    futures = {executor.submit(agent.generate_response, session_id): agent for agent in batch}
-                    for future in concurrent.futures.as_completed(futures):
-                        agent = futures[future]
-                        try:
-                            reply = future.result()
-                            chat_gui.chat_history.append(f"{agent.profile.name}: {reply}")
-                            print(f"{agent.profile.name}: {reply}")
-                        except Exception as exc:
-                            print(f'{agent.profile.name} generated an exception: {exc}')
-                        finally:
-                            # Mark agent as done thinking
-                            chat_gui.set_agent_thinking(agent.profile.name, False)
-                
-                # Add a small delay between batches to avoid rate limiting
-                if i + batch_size < len(active_agents):
-                    time.sleep(0.5)  # 500ms delay between batches
+                    # Add a small delay between batches to avoid rate limiting
+                    if i + batch_size < len(active_agents):
+                        time.sleep(0.5)  # 500ms delay between batches
 
-            # Removed current_chat_index - using speech bubbles instead
+                # Removed current_chat_index - using speech bubbles instead
 
         if app_state == "CHAT":
             # CHAT STATE LOGIC
