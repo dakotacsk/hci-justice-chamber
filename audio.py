@@ -16,6 +16,7 @@ class SpeechRecognizer:
         self.audio_queue = Queue()
         self.result_queue = Queue()
         self.running = False
+        self.listening_enabled = False
         self.current_audio_level = 0.0  # Current audio level (0.0 to 1.0)
         self.audio_level_lock = threading.Lock()  # Thread-safe access to audio level
 
@@ -44,27 +45,27 @@ class SpeechRecognizer:
         while self.running:
             try:
                 data = stream.read(buffer_size, exception_on_overflow=False)
-                
+
                 # Calculate audio level (RMS) for visual feedback
                 audio_data = np.frombuffer(data, dtype=np.int16)
                 rms = np.sqrt(np.mean(audio_data**2))
                 # Normalize to 0-1 range (int16 max is 32768)
                 normalized_level = min(1.0, rms / 32768.0)
-                
+
                 # Update audio level thread-safely
                 with self.audio_level_lock:
                     self.current_audio_level = normalized_level
-                
+
                 # Don't block if queue is full - drop old audio to prevent lag
-                if self.audio_queue.qsize() < 3:  # Keep queue small
-                    self.audio_queue.put(data)
-                else:
-                    # Queue is backing up - clear old data and add new
-                    try:
-                        self.audio_queue.get_nowait()
-                    except:
-                        pass
-                    self.audio_queue.put(data)
+                if self.listening_enabled:
+                    if self.audio_queue.qsize() < 3:
+                        self.audio_queue.put(data)
+                    else:
+                        try:
+                            self.audio_queue.get_nowait()
+                        except:
+                            pass
+                        self.audio_queue.put(data)
             except Exception as e:
                 # Continue on errors to prevent crashes
                 continue
@@ -79,7 +80,7 @@ class SpeechRecognizer:
             # Process multiple chunks per iteration to catch up faster
             chunks_processed = 0
             max_chunks_per_iteration = 5
-            
+
             while chunks_processed < max_chunks_per_iteration:
                 try:
                     # Get audio data (non-blocking if queue is empty)
@@ -87,7 +88,7 @@ class SpeechRecognizer:
                 except:
                     # Queue is empty, break to sleep
                     break
-                
+
                 # Process audio chunk
                 if self.recognizer.AcceptWaveform(data):
                     # Final result (complete phrase)
@@ -101,9 +102,9 @@ class SpeechRecognizer:
                         # Partial results help the recognizer stay responsive but we don't need to process them
                     except:
                         pass
-                
+
                 chunks_processed += 1
-            
+
             # Sleep briefly if we processed all chunks or queue was empty
             if chunks_processed == 0:
                 time.sleep(0.01)  # Avoid busy-waiting when queue is empty
@@ -116,7 +117,7 @@ class SpeechRecognizer:
         if not self.result_queue.empty():
             return self.result_queue.get()
         return None
-    
+
     def get_audio_level(self):
         """Get current audio level (0.0 to 1.0) for visual feedback"""
         with self.audio_level_lock:

@@ -195,21 +195,21 @@ def main():
             if event.type == pygame.QUIT:
                 running = False
 
-        # Only process voice input if voice mode is active
-        if chat_gui.is_voice_mode_active():
+        # Only process voice input if space bar is pressed
+        keys = pygame.key.get_pressed()
+        elapsed_time = time.time() - chat_gui.get_voice_detected()
+        speech.listening_enabled = keys[pygame.K_SPACE] or elapsed_time < 2
+        chat_gui.voice_mode_active = keys[pygame.K_SPACE]
+        if keys[pygame.K_SPACE] or elapsed_time < 2:
+            # Wait 2 seconds to process detected voice
             new_speech = speech.get_latest_text()
             if new_speech:
-                current_text = f"Heard: {new_speech}"
                 print(f"Voice command: {new_speech}")
-
-                # Update microphone indicator to show voice was detected
-                chat_gui.set_voice_detected()
-
-                # Display speech input in the textbox
-                chat_gui.main_input_box.text = new_speech
 
                 chat_gui.chat_history.append(f"You: {new_speech}")
                 print(f"\nYou: {new_speech}")
+
+                chat_gui.main_input_box.text = new_speech
 
                 active_agents = [
                     agent
@@ -234,25 +234,34 @@ def main():
                 # Process in smaller batches with delays between batches
                 batch_size = 2  # Process 2 agents at a time
                 for i in range(0, len(active_agents), batch_size):
-                    batch = active_agents[i:i + batch_size]
-                    with concurrent.futures.ThreadPoolExecutor(max_workers=batch_size) as executor:
+                    batch = active_agents[i : i + batch_size]
+                    with concurrent.futures.ThreadPoolExecutor(
+                        max_workers=batch_size
+                    ) as executor:
                         # Mark agents as thinking when submitting
                         for agent in batch:
                             chat_gui.set_agent_thinking(agent.profile.name, True)
-                        
-                        futures = {executor.submit(agent.generate_response, session_id): agent for agent in batch}
+
+                        futures = {
+                            executor.submit(agent.generate_response, session_id): agent
+                            for agent in batch
+                        }
                         for future in concurrent.futures.as_completed(futures):
                             agent = futures[future]
                             try:
                                 reply = future.result()
-                                chat_gui.chat_history.append(f"{agent.profile.name}: {reply}")
+                                chat_gui.chat_history.append(
+                                    f"{agent.profile.name}: {reply}"
+                                )
                                 print(f"{agent.profile.name}: {reply}")
                             except Exception as exc:
-                                print(f'{agent.profile.name} generated an exception: {exc}')
+                                print(
+                                    f"{agent.profile.name} generated an exception: {exc}"
+                                )
                             finally:
                                 # Mark agent as done thinking
                                 chat_gui.set_agent_thinking(agent.profile.name, False)
-                    
+
                     # Add a small delay between batches to avoid rate limiting
                     if i + batch_size < len(active_agents):
                         time.sleep(0.5)  # 500ms delay between batches
@@ -269,63 +278,6 @@ def main():
                 if chat_gui.create_advocate_button.is_clicked(event):
                     app_state = "CREATION"
                     break
-                if chat_gui.submit_button.is_clicked(event):
-                    user_input = chat_gui.main_input_box.text
-                    if not user_input:
-                        continue
-
-                    chat_gui.main_input_box.clear()
-                    chat_gui.chat_history.append(f"You: {user_input}")
-                    print(f"\nYou: {user_input}")
-
-                    active_agents = [
-                        agent
-                        for agent, checkbox in zip(
-                            chat_gui.agents.values(), chat_gui.checkboxes
-                        )
-                        if checkbox.is_on
-                    ]
-                    if not active_agents:
-                        chat_gui.chat_history.append("No agents are active.")
-                        print("No agents are active.")
-                        continue
-
-                    # Use the same session_id for the entire session
-                    for agent in active_agents:
-                        agent.memory.add(session_id, "User", "user", user_input)
-
-                    # Randomize the order of agents for responding
-                    random.shuffle(active_agents)
-
-                    # Process agents with rate limiting to avoid 429 errors
-                    # Process in smaller batches with delays between batches
-                    batch_size = 2  # Process 2 agents at a time
-                    for i in range(0, len(active_agents), batch_size):
-                        batch = active_agents[i:i + batch_size]
-                        with concurrent.futures.ThreadPoolExecutor(max_workers=batch_size) as executor:
-                            # Mark agents as thinking when submitting
-                            for agent in batch:
-                                chat_gui.set_agent_thinking(agent.profile.name, True)
-                            
-                            futures = {executor.submit(agent.generate_response, session_id): agent for agent in batch}
-                            for future in concurrent.futures.as_completed(futures):
-                                agent = futures[future]
-                                try:
-                                    reply = future.result()
-                                    chat_gui.chat_history.append(f"{agent.profile.name}: {reply}")
-                                    print(f"{agent.profile.name}: {reply}")
-                                except Exception as exc:
-                                    print(f'{agent.profile.name} generated an exception: {exc}')
-                                finally:
-                                    # Mark agent as done thinking
-                                    chat_gui.set_agent_thinking(agent.profile.name, False)
-                        
-                        # Add a small delay between batches to avoid rate limiting
-                        if i + batch_size < len(active_agents):
-                            time.sleep(0.5)  # 500ms delay between batches
-                    
-                    # Removed current_chat_index - using speech bubbles instead
-
             chat_gui.draw(screen)
 
         elif app_state == "CREATION":

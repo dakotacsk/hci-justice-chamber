@@ -8,19 +8,18 @@ import math
 
 class Button:
     """Wrapper for pygame-gui UIButton to maintain compatibility"""
+
     def __init__(self, x, y, width, height, label, manager, color=(100, 100, 200)):
         self.rect = pygame.Rect(x, y, width, height)
         self.label = label
         self.color = color
         self.button = pygame_gui.elements.UIButton(
-            relative_rect=self.rect,
-            text=label,
-            manager=manager
+            relative_rect=self.rect, text=label, manager=manager
         )
         # Set custom colors
-        self.button.colours['normal_bg'] = color
-        self.button.colours['hovered_bg'] = tuple(min(255, c + 20) for c in color)
-        self.button.colours['pressed_bg'] = tuple(max(0, c - 20) for c in color)
+        self.button.colours["normal_bg"] = color
+        self.button.colours["hovered_bg"] = tuple(min(255, c + 20) for c in color)
+        self.button.colours["pressed_bg"] = tuple(max(0, c - 20) for c in color)
 
     def draw(self, screen):
         # pygame-gui handles drawing automatically
@@ -35,13 +34,14 @@ class Button:
 
 class CheckBox:
     """Wrapper for pygame-gui UICheckBox to maintain compatibility"""
+
     def __init__(self, x, y, width, height, label, manager, is_on=False):
         self.rect = pygame.Rect(x, y, width, height)
         self.label = label
         self.checkbox = pygame_gui.elements.UICheckBox(
             relative_rect=self.rect,
             text="",  # Empty text since we draw label separately
-            manager=manager
+            manager=manager,
         )
         # Track state ourselves since pygame-gui UICheckBox state can be tricky
         self._checked = is_on
@@ -51,9 +51,9 @@ class CheckBox:
             except:
                 pass
         # Create label text separately
-        self.label_surface = pygame.font.Font("resources/roboto_fonts/Roboto-Regular.ttf", int(24 * 0.8)).render(
-            label, True, (20, 20, 20)
-        )
+        self.label_surface = pygame.font.Font(
+            "resources/roboto_fonts/Roboto-Regular.ttf", int(24 * 0.8)
+        ).render(label, True, (20, 20, 20))
         self.label_pos = (self.rect.x + self.rect.width + 10, self.rect.y)
 
     def draw(self, screen):
@@ -65,23 +65,23 @@ class CheckBox:
         # Try multiple methods to check state
         try:
             # First try the checked attribute
-            if hasattr(self.checkbox, 'checked'):
+            if hasattr(self.checkbox, "checked"):
                 checked = self.checkbox.checked
                 self._checked = bool(checked)
                 return self._checked
         except:
             pass
-        
+
         # Try get_state()
         try:
             state = self.checkbox.get_state()
             # UICheckBox states: when checked, might be 'selected' or contain 'selected'
-            if 'selected' in str(state).lower():
+            if "selected" in str(state).lower():
                 self._checked = True
                 return True
         except:
             pass
-        
+
         # Fallback to our tracked state
         return self._checked
 
@@ -106,12 +106,13 @@ class CheckBox:
 
 class TextInputBox:
     """Multi-line text input using UITextBox with manual editing support"""
+
     def __init__(self, x, y, width, height, font, manager, placeholder=""):
         self.rect = pygame.Rect(x, y, width, height)
         self.placeholder = placeholder
         self.font = font
         self.active = False
-        
+
         # Use UITextBox for display with scrollbars
         # Set placeholder as initial HTML if provided
         initial_html = ""
@@ -121,25 +122,32 @@ class TextInputBox:
             relative_rect=self.rect,
             html_text=initial_html,
             manager=manager,
-            wrap_to_height=False  # Fixed height - scrollbars will appear when content overflows
+            wrap_to_height=False,  # Fixed height - scrollbars will appear when content overflows
         )
         # Try to make background transparent/white by setting all possible color properties
         white = pygame.Color(255, 255, 255)
         black = pygame.Color(0, 0, 0)
-        if hasattr(self.textbox, 'colours'):
+        if hasattr(self.textbox, "colours"):
             # Set all background-related colors to white
-            for bg_key in ['dark_bg', 'normal_bg', 'selected_bg', 'bg', 'background_colour', 'misc_bg']:
+            for bg_key in [
+                "dark_bg",
+                "normal_bg",
+                "selected_bg",
+                "bg",
+                "background_colour",
+                "misc_bg",
+            ]:
                 if bg_key in self.textbox.colours:
                     self.textbox.colours[bg_key] = white
             # Set text colors to black
-            for text_key in ['normal_text', 'text', 'text_colour', 'text_color']:
+            for text_key in ["normal_text", "text", "text_colour", "text_color"]:
                 if text_key in self.textbox.colours:
                     self.textbox.colours[text_key] = black
         # Also try setting background_colour attribute directly if it exists
-        if hasattr(self.textbox, 'background_colour'):
+        if hasattr(self.textbox, "background_colour"):
             self.textbox.background_colour = white
         self.textbox.rebuild()
-        
+
         # Store text separately
         self._text = ""
         self._lines = [""]
@@ -165,17 +173,33 @@ class TextInputBox:
             self._text = "\n".join(self._lines)
             # Update the textbox - escape HTML and convert newlines
             if self._text:
-                escaped_msg = self._text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\n", "<br>")
+                escaped_msg = (
+                    self._text.replace("&", "&amp;")
+                    .replace("<", "&lt;")
+                    .replace(">", "&gt;")
+                    .replace("\n", "<br>")
+                )
                 html_text = f'<body bgcolor="#FFFFFF"><font color="#000000">{escaped_msg}</font></body>'
             else:
                 # Show placeholder if text is empty
-                html_text = f'<body bgcolor="#FFFFFF"><font color="#999999">{self.placeholder}</font></body>' if self.placeholder else '<body bgcolor="#FFFFFF"></body>'
+                html_text = (
+                    f'<body bgcolor="#FFFFFF"><font color="#999999">{self.placeholder}</font></body>'
+                    if self.placeholder
+                    else '<body bgcolor="#FFFFFF"></body>'
+                )
             self.textbox.html_text = html_text
             self.textbox.rebuild()
             # Ensure white background after rebuild - try all possible keys
-            if hasattr(self.textbox, 'colours'):
+            if hasattr(self.textbox, "colours"):
                 white = pygame.Color(255, 255, 255)
-                for bg_key in ['dark_bg', 'normal_bg', 'selected_bg', 'bg', 'background_colour', 'misc_bg']:
+                for bg_key in [
+                    "dark_bg",
+                    "normal_bg",
+                    "selected_bg",
+                    "bg",
+                    "background_colour",
+                    "misc_bg",
+                ]:
                     if bg_key in self.textbox.colours:
                         self.textbox.colours[bg_key] = white
 
@@ -188,17 +212,26 @@ class TextInputBox:
         self._text = value
         self._lines = value.split("\n") if value else [""]
         if value:
-            escaped_msg = value.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\n", "<br>")
+            escaped_msg = (
+                value.replace("&", "&amp;")
+                .replace("<", "&lt;")
+                .replace(">", "&gt;")
+                .replace("\n", "<br>")
+            )
             html_text = f'<body bgcolor="#FFFFFF"><font color="#000000">{escaped_msg}</font></body>'
         else:
             # Show placeholder if text is empty
-            html_text = f'<body bgcolor="#FFFFFF"><font color="#999999">{self.placeholder}</font></body>' if self.placeholder else '<body bgcolor="#FFFFFF"></body>'
+            html_text = (
+                f'<body bgcolor="#FFFFFF"><font color="#999999">{self.placeholder}</font></body>'
+                if self.placeholder
+                else '<body bgcolor="#FFFFFF"></body>'
+            )
         self.textbox.html_text = html_text
         self.textbox.rebuild()
         # Ensure white background after rebuild
-        if hasattr(self.textbox, 'colours'):
+        if hasattr(self.textbox, "colours"):
             white = pygame.Color(255, 255, 255)
-            for bg_key in ['dark_bg', 'normal_bg', 'selected_bg', 'bg']:
+            for bg_key in ["dark_bg", "normal_bg", "selected_bg", "bg"]:
                 if bg_key in self.textbox.colours:
                     self.textbox.colours[bg_key] = white
 
@@ -220,9 +253,15 @@ class TextInputBox:
 class CreationForm:
     def __init__(self, screen_width, screen_height):
         self.manager = pygame_gui.UIManager((screen_width, screen_height))
-        self.font_title = pygame.font.Font("resources/roboto_fonts/Roboto-Bold.ttf", int(48 * 0.8))
-        self.font_label = pygame.font.Font("resources/roboto_fonts/Roboto-Regular.ttf", int(32 * 0.8))
-        self.font_input = pygame.font.Font("resources/roboto_fonts/Roboto-Regular.ttf", int(28 * 0.8))
+        self.font_title = pygame.font.Font(
+            "resources/roboto_fonts/Roboto-Bold.ttf", int(48 * 0.8)
+        )
+        self.font_label = pygame.font.Font(
+            "resources/roboto_fonts/Roboto-Regular.ttf", int(32 * 0.8)
+        )
+        self.font_input = pygame.font.Font(
+            "resources/roboto_fonts/Roboto-Regular.ttf", int(28 * 0.8)
+        )
         self.width = screen_width
         self.height = screen_height
 
@@ -237,63 +276,86 @@ class CreationForm:
         self.labels = []
 
         input_w = self.width * 0.6
-        input_h = int(100 * 0.8)  # Increased height to show more content before scrolling
+        input_h = int(
+            100 * 0.8
+        )  # Increased height to show more content before scrolling
         start_y = int(150 * 0.8)
         label_to_box_spacing = int(40 * 0.8)  # Space between label and input box
         box_height = input_h
-        box_to_next_label_spacing = int(20 * 0.8)  # Space after input box before next label
-        y_padding = label_to_box_spacing + box_height + box_to_next_label_spacing  # Total spacing between labels
+        box_to_next_label_spacing = int(
+            20 * 0.8
+        )  # Space after input box before next label
+        y_padding = (
+            label_to_box_spacing + box_height + box_to_next_label_spacing
+        )  # Total spacing between labels
 
         for i, q in enumerate(self.questions):
             y_pos = start_y + i * y_padding
-            label_surface = self.font_label.render(q, True, (255, 255, 255))  # White text for dark blue background
+            label_surface = self.font_label.render(
+                q, True, (255, 255, 255)
+            )  # White text for dark blue background
             self.labels.append((label_surface, (self.width / 2 - input_w / 2, y_pos)))
-            
+
             # Use TextInputBox for multi-line input with scrollbars - same as main page
             box_rect = pygame.Rect(
                 self.width / 2 - input_w / 2,
                 y_pos + label_to_box_spacing,
                 input_w,
-                input_h
+                input_h,
             )
             # Use placeholder text for better UX
             placeholder_text = f"Enter your answer for question {i+1}..."
             textbox = TextInputBox(
-                box_rect.x, box_rect.y, box_rect.width, box_rect.height,
-                self.font_input, self.manager, placeholder=placeholder_text
+                box_rect.x,
+                box_rect.y,
+                box_rect.width,
+                box_rect.height,
+                self.font_input,
+                self.manager,
+                placeholder=placeholder_text,
             )
             self.input_boxes.append(textbox)
 
         # Position save button after the last input box with proper spacing
-        last_box_bottom = start_y + (len(self.questions) - 1) * y_padding + label_to_box_spacing + box_height
+        last_box_bottom = (
+            start_y
+            + (len(self.questions) - 1) * y_padding
+            + label_to_box_spacing
+            + box_height
+        )
         save_rect = pygame.Rect(
             self.width / 2 - int(100 * 0.8),
             last_box_bottom + int(30 * 0.8),  # Add spacing after last input box
             int(200 * 0.8),
-            int(50 * 0.8)
+            int(50 * 0.8),
         )
         self.save_button = Button(
-            save_rect.x, save_rect.y, save_rect.width, save_rect.height,
-            "Save Advocate", self.manager
+            save_rect.x,
+            save_rect.y,
+            save_rect.width,
+            save_rect.height,
+            "Save Advocate",
+            self.manager,
         )
-        
+
         back_rect = pygame.Rect(
-            int(20 * 0.8),
-            int(20 * 0.8),
-            int(40 * 0.8),
-            int(40 * 0.8)
+            int(20 * 0.8), int(20 * 0.8), int(40 * 0.8), int(40 * 0.8)
         )
         self.back_button = Button(
-            back_rect.x, back_rect.y, back_rect.width, back_rect.height,
-            "<", self.manager
+            back_rect.x,
+            back_rect.y,
+            back_rect.width,
+            back_rect.height,
+            "<",
+            self.manager,
         )
 
     def handle_event(self, event):
         self.manager.process_events(event)
-        
+
         for box in self.input_boxes:
             box.handle_event(event)
-            
+
         if self.save_button.is_clicked(event):
             return {
                 "name": self.input_boxes[0].text,
@@ -310,11 +372,14 @@ class CreationForm:
         title_surface = self.font_title.render(
             "Create Your Justice Advocate", True, (255, 255, 255)  # White text
         )
-        screen.blit(title_surface, (self.width / 2 - title_surface.get_width() / 2, int(50 * 0.8)))
+        screen.blit(
+            title_surface,
+            (self.width / 2 - title_surface.get_width() / 2, int(50 * 0.8)),
+        )
 
         for label, pos in self.labels:
             screen.blit(label, pos)
-        
+
         # Draw white backgrounds for input boxes before pygame-gui renders
         # This ensures the UITextBox scrollbars work properly
         for box in self.input_boxes:
@@ -322,20 +387,30 @@ class CreationForm:
 
         self.save_button.draw(screen)
         self.back_button.draw(screen)
-        
+
         # Update and draw pygame-gui elements (including UITextBox with scrollbars)
         self.manager.update(pygame.time.get_ticks() / 1000.0)
         self.manager.draw_ui(screen)
 
 
 class ChatGUI:
-    def __init__(self, agents, screen_width, screen_height, selected_advocate_key=None, num_custom_advocates=0, speech_recognizer=None):
+    def __init__(
+        self,
+        agents,
+        screen_width,
+        screen_height,
+        selected_advocate_key=None,
+        num_custom_advocates=0,
+        speech_recognizer=None,
+    ):
         self.screen_width = screen_width
         self.screen_height = screen_height
         self.manager = pygame_gui.UIManager((screen_width, screen_height))
         self.screen = pygame.display.set_mode((self.screen_width, self.screen_height))
         pygame.display.set_caption("Justice Council")
-        self.speech_recognizer = speech_recognizer  # Store reference to speech recognizer for audio levels
+        self.speech_recognizer = (
+            speech_recognizer  # Store reference to speech recognizer for audio levels
+        )
 
         # Resources
         self.background_image = pygame.image.load("resources/background.jpg").convert()
@@ -363,99 +438,132 @@ class ChatGUI:
                 (int(60 * 0.8), int(100 * 0.8)),
             ),
         }
-        
+
         # Load mystery justice sprite for custom justices
         self.mystery_sprite = pygame.transform.scale(
             pygame.image.load("resources/sprites/mystery_justice.png").convert_alpha(),
             (int(60 * 0.8), int(100 * 0.8)),
         )
-        
+
         # Track which custom justice is currently selected (only one at a time)
-        self.selected_custom_justice = selected_advocate_key if selected_advocate_key and selected_advocate_key not in ["Sam (Utilitarian)", "Amara (Restorative)", "Jamie (Meritocracy)", "Jordan (Rawlsian)"] else None
+        self.selected_custom_justice = (
+            selected_advocate_key
+            if selected_advocate_key
+            and selected_advocate_key
+            not in [
+                "Sam (Utilitarian)",
+                "Amara (Restorative)",
+                "Jamie (Meritocracy)",
+                "Jordan (Rawlsian)",
+            ]
+            else None
+        )
 
         # State & UI
-        self.font = pygame.font.Font("resources/roboto_fonts/Roboto-Regular.ttf", int(24 * 0.8))
+        self.font = pygame.font.Font(
+            "resources/roboto_fonts/Roboto-Regular.ttf", int(24 * 0.8)
+        )
         self.agents = agents
         self.chat_history = []
         self.current_message_index = -1  # Index of current message being displayed
-        self.current_bubble_index_in_round = 0  # Which bubble in the current round we're showing
+        self.current_bubble_index_in_round = (
+            0  # Which bubble in the current round we're showing
+        )
         self.last_round_size = 0  # Track when round changes to reset bubble index
-        self.speech_bubble_height = int(200 * 0.8)  # Increased height for speech bubbles
-        self.speech_bubble_scroll_offsets = {}  # Scroll offsets per speaker for long messages
+        self.speech_bubble_height = int(
+            200 * 0.8
+        )  # Increased height for speech bubbles
+        self.speech_bubble_scroll_offsets = (
+            {}
+        )  # Scroll offsets per speaker for long messages
         self.speech_bubble_rects = {}  # Store speech bubble positions per speaker
         self.speech_bubble_scrollbars = {}  # pygame-gui scrollbars per speech bubble
-        
+
         # Track which agents are currently thinking (generating responses)
-        self.thinking_agents = set()  # Set of agent names that are currently generating responses
+        self.thinking_agents = (
+            set()
+        )  # Set of agent names that are currently generating responses
         self.thinking_animation_time = 0  # For blinking animation
-        
+
         # Voice input indicator state
         self.voice_detected_time = 0  # Timestamp when voice was last detected
-        self.voice_indicator_duration = 1.0  # How long to show "active" state (in seconds)
+        self.voice_indicator_duration = (
+            1.0  # How long to show "active" state (in seconds)
+        )
         self.voice_mode_active = True  # Track whether voice mode is active
         self.mic_rect = None  # Store microphone rect for click detection
-        
+
         input_box_x = int((1560 - 40 - 500) * 0.8)
         input_box_y = int(40 * 0.8)
         input_box_width = int(500 * 0.8)
         input_box_height = int(self.screen_height * 0.2)
-        
-        input_rect = pygame.Rect(input_box_x, input_box_y, input_box_width, input_box_height)
+
         self.main_input_box = TextInputBox(
-            input_box_x, input_box_y, input_box_width, input_box_height,
-            pygame.font.Font("resources/roboto_fonts/Roboto-Regular.ttf", int(24 * 0.8)),
+            input_box_x,
+            input_box_y,
+            input_box_width,
+            input_box_height,
+            pygame.font.Font(
+                "resources/roboto_fonts/Roboto-Regular.ttf", int(24 * 0.8)
+            ),
             self.manager,
-            placeholder="(ask a question or tell a story about justice...)"
+            placeholder="Your voice input will appear here (ask a question about justice)",
         )
-        
-        submit_rect = pygame.Rect(
-            input_box_x + input_box_width - int(120 * 0.8),
-            input_box_y + input_box_height + int(10 * 0.8),
-            int(120 * 0.8),
-            int(40 * 0.8)
-        )
-        self.submit_button = Button(
-            submit_rect.x, submit_rect.y, submit_rect.width, submit_rect.height,
-            "Submit", self.manager
-        )
-        
+
         create_rect = pygame.Rect(
             self.screen_width - int(440 * 0.8),
             self.screen_height - int(60 * 0.8),
             int(400 * 0.8),
-            int(40 * 0.8)
+            int(40 * 0.8),
         )
         self.create_advocate_button = Button(
-            create_rect.x, create_rect.y, create_rect.width, create_rect.height,
-            "Create custom Justice Advocate", self.manager
+            create_rect.x,
+            create_rect.y,
+            create_rect.width,
+            create_rect.height,
+            "Create custom Justice Advocate",
+            self.manager,
         )
-        
+
         # Add button to select/manage advocates
         select_rect = pygame.Rect(
             self.screen_width - int(440 * 0.8),
             self.screen_height - int(110 * 0.8),
             int(400 * 0.8),
-            int(40 * 0.8)
+            int(40 * 0.8),
         )
         self.select_advocate_button = Button(
-            select_rect.x, select_rect.y, select_rect.width, select_rect.height,
-            "Select a custom Justice Advocate", self.manager, color=(100, 150, 200)
+            select_rect.x,
+            select_rect.y,
+            select_rect.width,
+            select_rect.height,
+            "Select a custom Justice Advocate",
+            self.manager,
+            color=(100, 150, 200),
         )
-        
+
         # Removed prev/next buttons - not needed with speech bubbles
-        
+
         self.checkboxes = self._create_checkboxes()
-        self.checkbox_label = pygame.font.Font("resources/roboto_fonts/Roboto-Regular.ttf", int(24 * 0.8)).render(
-            "Select the character(s) you would like to talk to:", True, (20, 20, 20)  # Black text for visibility
+        self.checkbox_label = pygame.font.Font(
+            "resources/roboto_fonts/Roboto-Regular.ttf", int(24 * 0.8)
+        ).render(
+            "Select the character(s) you would like to talk to:",
+            True,
+            (20, 20, 20),  # Black text for visibility
         )
-        
+
         # Next button will be positioned dynamically next to speech bubble
         # Create it initially, position will be updated when bubble is drawn
         # Make it wider to accommodate counter text like "Next Response (1/5)"
         next_button_rect = pygame.Rect(0, 0, int(200 * 0.8), int(35 * 0.8))
         self.next_message_button = Button(
-            next_button_rect.x, next_button_rect.y, next_button_rect.width, next_button_rect.height,
-            "Next Response", self.manager
+            next_button_rect.x,
+            next_button_rect.y,
+            next_button_rect.width,
+            next_button_rect.height,
+            "Next Response",
+            self.manager,
         )
 
     def _create_checkboxes(self):
@@ -464,8 +572,12 @@ class ChatGUI:
         for agent in self.agents.values():
             checkbox_rect = pygame.Rect(x, y, int(20 * 0.8), int(20 * 0.8))
             checkbox = CheckBox(
-                checkbox_rect.x, checkbox_rect.y, checkbox_rect.width, checkbox_rect.height,
-                agent.profile.name, self.manager
+                checkbox_rect.x,
+                checkbox_rect.y,
+                checkbox_rect.width,
+                checkbox_rect.height,
+                agent.profile.name,
+                self.manager,
             )
             checkboxes.append(checkbox)
             y += int(40 * 0.8)
@@ -473,25 +585,23 @@ class ChatGUI:
 
     def handle_event(self, event):
         self.manager.process_events(event)
-        
-        self.main_input_box.handle_event(event)
         for checkbox in self.checkboxes:
             checkbox.handle_event(event)
 
         # Handle next button for cycling through messages
         if self.next_message_button.is_clicked(event):
             self._next_message()
-        
+
         # Handle select advocate button
         if self.select_advocate_button.is_clicked(event):
             return "select_advocate"
-        
+
         # Handle microphone button click
         if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
             if self.mic_rect and self.mic_rect.collidepoint(event.pos):
                 self.voice_mode_active = not self.voice_mode_active
                 return "mic_toggled"
-        
+
         # Handle scroll wheel for speech bubble scrolling
         if event.type == pygame.MOUSEWHEEL:
             # Check which bubble the mouse is over and scroll that one
@@ -501,32 +611,44 @@ class ChatGUI:
                 parts = msg.split(":", 1)
                 if len(parts) == 2:
                     speaker = parts[0].strip()
-                    if speaker in self.speech_bubble_scrollbars and self.speech_bubble_scrollbars[speaker]:
+                    if (
+                        speaker in self.speech_bubble_scrollbars
+                        and self.speech_bubble_scrollbars[speaker]
+                    ):
                         bubble_rect = self.speech_bubble_rects.get(speaker)
                         if bubble_rect and bubble_rect.collidepoint(mouse_pos):
                             # Update scrollbar position via pygame-gui
-                            current_scroll = self.speech_bubble_scrollbars[speaker].scroll_position
-                            new_scroll = max(0, min(
-                                current_scroll - event.y * 20,
-                                self.speech_bubble_scrollbars[speaker].bottom_limit
-                            ))
-                            self.speech_bubble_scrollbars[speaker].scroll_position = new_scroll
+                            current_scroll = self.speech_bubble_scrollbars[
+                                speaker
+                            ].scroll_position
+                            new_scroll = max(
+                                0,
+                                min(
+                                    current_scroll - event.y * 20,
+                                    self.speech_bubble_scrollbars[speaker].bottom_limit,
+                                ),
+                            )
+                            self.speech_bubble_scrollbars[speaker].scroll_position = (
+                                new_scroll
+                            )
                             self.speech_bubble_scroll_offsets[speaker] = new_scroll
                             break
 
     def _get_current_message(self):
         """Get the current message being displayed"""
-        if self.chat_history and 0 <= self.current_message_index < len(self.chat_history):
+        if self.chat_history and 0 <= self.current_message_index < len(
+            self.chat_history
+        ):
             return self.chat_history[self.current_message_index]
         return None
-    
+
     def _next_message(self):
         """Cycle to the next bubble in the current round"""
         latest_round = self._get_latest_round_messages()
-        
+
         if not latest_round:
             return
-        
+
         # Reset scroll for current speaker
         if self.current_bubble_index_in_round < len(latest_round):
             current_msg = latest_round[self.current_bubble_index_in_round]
@@ -534,16 +656,19 @@ class ChatGUI:
             if len(parts) == 2:
                 current_speaker = parts[0].strip()
                 self.speech_bubble_scroll_offsets[current_speaker] = 0
-                if current_speaker in self.speech_bubble_scrollbars and self.speech_bubble_scrollbars[current_speaker]:
+                if (
+                    current_speaker in self.speech_bubble_scrollbars
+                    and self.speech_bubble_scrollbars[current_speaker]
+                ):
                     self.speech_bubble_scrollbars[current_speaker].scroll_position = 0
-        
+
         # Move to next bubble in round
         self.current_bubble_index_in_round += 1
-        
+
         # Wrap around if we've gone past the last bubble
         if self.current_bubble_index_in_round >= len(latest_round):
             self.current_bubble_index_in_round = 0
-    
+
     def _clamp_scroll(self):
         """Clamp scroll offset to valid range"""
         current_msg = self._get_current_message()
@@ -557,6 +682,7 @@ class ChatGUI:
 
         # Update thinking animation time
         import time
+
         self.thinking_animation_time = time.time()
 
         # Initialize current message index if needed
@@ -568,13 +694,12 @@ class ChatGUI:
                     break
 
         self.main_input_box.draw(screen)
-        self.submit_button.draw(screen)
         self.create_advocate_button.draw(screen)
         self.select_advocate_button.draw(screen)
-        
+
         # Draw microphone indicator
         self._draw_microphone_indicator(screen)
-        
+
         # Only draw next button if there are multiple messages in the latest round
         latest_round = self._get_latest_round_messages()
         if len(latest_round) > 1:
@@ -584,16 +709,16 @@ class ChatGUI:
             button_text = f"Next Response ({current_position}/{total_responses})"
             self.next_message_button.button.set_text(button_text)
             self.next_message_button.draw(screen)
-        
+
         screen.blit(self.checkbox_label, (int(40 * 0.8), int(40 * 0.8)))
         for checkbox in self.checkboxes:
             checkbox.draw(screen)
 
         self._draw_sprites(screen)
-        
+
         # Draw speech bubbles above characters (scrollbar updates handled within _draw_speech_bubble)
         self._draw_speech_bubbles(screen)
-        
+
         self.manager.update(pygame.time.get_ticks() / 1000.0)
         self.manager.draw_ui(screen)
 
@@ -601,12 +726,12 @@ class ChatGUI:
         # Position justices in a pentagon formation around the table
         # Table center is at screen center - no scaling applied to center
         import math
-        
+
         # Use actual screen center, not scaled
-        center_x = self.screen_width // 2   # Screen center X (624 for 1248px screen)
-        center_y = self.screen_height // 2   # Screen center Y (351 for 702px screen)
-        radius = int(120 * 0.8)              # Smaller radius to bring them closer together
-        
+        center_x = self.screen_width // 2  # Screen center X (624 for 1248px screen)
+        center_y = self.screen_height // 2  # Screen center Y (351 for 702px screen)
+        radius = int(120 * 0.8)  # Smaller radius to bring them closer together
+
         # Calculate pentagon positions (5 vertices evenly spaced around a circle)
         # Start at top and go clockwise
         # Angle offset: -90 degrees to start at top, then add 72 degrees per vertex (360/5 = 72)
@@ -616,20 +741,20 @@ class ChatGUI:
             x = center_x + radius * math.cos(angle)
             y = center_y + radius * math.sin(angle)
             positions.append((int(x), int(y)))
-        
+
         # Assign positions to justices
         # Order: Top, Top-right, Bottom-right, Bottom-left, Top-left
         sprite_positions = {
-            "Jamie (Meritocracy)": positions[4],   # Top
-            "Jordan (Rawlsian)": positions[1],      # Top-right
-            "Amara (Restorative)": positions[2],   # Bottom-right
-            "Sam (Utilitarian)": positions[3],     # Bottom-left
+            "Jamie (Meritocracy)": positions[4],  # Top
+            "Jordan (Rawlsian)": positions[1],  # Top-right
+            "Amara (Restorative)": positions[2],  # Bottom-right
+            "Sam (Utilitarian)": positions[3],  # Bottom-left
         }
-        
+
         # Custom justice gets the 5th position (top-left)
         if agent_name == self.selected_custom_justice:
             return positions[0]  # Top-left position
-        
+
         return sprite_positions.get(agent_name)
 
     def _draw_sprites(self, screen):
@@ -638,7 +763,7 @@ class ChatGUI:
             if checkbox.is_on:
                 sprite_pos = None
                 sprite_surface = None
-                
+
                 # Check if it's a default justice
                 if checkbox.label in self.sprites:
                     sprite_pos = self._get_sprite_pos(checkbox.label)
@@ -649,19 +774,19 @@ class ChatGUI:
                     sprite_pos = self._get_sprite_pos(checkbox.label)
                     if sprite_pos:
                         sprite_surface = self.mystery_sprite
-                
+
                 # Draw sprite if found
                 if sprite_pos and sprite_surface:
                     screen.blit(sprite_surface, sprite_pos)
-                    
+
                     # Draw blinking border if agent is thinking
                     if checkbox.label in self.thinking_agents:
                         self._draw_thinking_border(screen, sprite_pos, sprite_surface)
-                    
+
                     # Draw "!" bubble if agent has a ready response that's not currently displayed
                     if self._agent_has_ready_response(checkbox.label):
                         self._draw_exclamation_bubble(screen, sprite_pos)
-    
+
     def _draw_thinking_border(self, screen, sprite_pos, sprite_surface):
         """Draw a blinking border around a sprite to indicate thinking"""
         # Calculate border rectangle around sprite
@@ -670,34 +795,42 @@ class ChatGUI:
             sprite_pos[0] - border_padding,
             sprite_pos[1] - border_padding,
             sprite_surface.get_width() + (border_padding * 2),
-            sprite_surface.get_height() + (border_padding * 2)
+            sprite_surface.get_height() + (border_padding * 2),
         )
-        
+
         # Blinking effect: oscillate between visible and semi-transparent
         # Use sine wave for smooth blinking (blinks every ~1 second)
         blink_speed = 3.0  # Speed of blinking
         current_time = time.time()
         alpha = int(128 + 127 * math.sin(current_time * blink_speed))
-        
+
         # Create a surface for the border with alpha
-        border_surface = pygame.Surface((border_rect.width, border_rect.height), pygame.SRCALPHA)
-        
+        border_surface = pygame.Surface(
+            (border_rect.width, border_rect.height), pygame.SRCALPHA
+        )
+
         # Draw border (outline only, not filled)
         border_color = (100, 200, 255, alpha)  # Light blue with alpha
         border_width = int(3 * 0.8)
-        
+
         # Draw border rectangle
-        pygame.draw.rect(border_surface, border_color, (0, 0, border_rect.width, border_rect.height), width=border_width, border_radius=int(5 * 0.8))
-        
+        pygame.draw.rect(
+            border_surface,
+            border_color,
+            (0, 0, border_rect.width, border_rect.height),
+            width=border_width,
+            border_radius=int(5 * 0.8),
+        )
+
         # Blit the border surface onto the screen
         screen.blit(border_surface, border_rect.topleft)
-    
+
     def _agent_has_ready_response(self, agent_name):
         """Check if an agent has a response ready but not currently displayed"""
         latest_round = self._get_latest_round_messages()
         if not latest_round:
             return False
-        
+
         # Check if this agent has a message in the latest round
         for msg in latest_round:
             parts = msg.split(":", 1)
@@ -712,46 +845,54 @@ class ChatGUI:
                             return False
                     # Agent has a ready response that's not currently displayed
                     return True
-        
+
         return False
-    
+
     def _draw_exclamation_bubble(self, screen, sprite_pos):
         """Draw a small speech bubble with '!' above a sprite - positioned where the actual speech bubble will appear"""
         # Position bubble at the same location as the actual speech bubble will be
         # This ensures the actual speech bubble will cover it when displayed
         bubble_size = int(40 * 0.8)
-        bubble_x = sprite_pos[0] + int(30 * 0.8)  # Center above sprite (same as speech bubble)
-        tail_bottom_y = sprite_pos[1] - int(20 * 0.8)  # Where tail points to (same as speech bubble)
-        
+        bubble_x = sprite_pos[0] + int(
+            30 * 0.8
+        )  # Center above sprite (same as speech bubble)
+        tail_bottom_y = sprite_pos[1] - int(
+            20 * 0.8
+        )  # Where tail points to (same as speech bubble)
+
         # Position bubble so the tail comes from the bottom, with "!" clearly above it
         bubble_rect = pygame.Rect(
             bubble_x - bubble_size // 2,
-            tail_bottom_y - bubble_size - int(8 * 0.8),  # Position bubble above tail point
+            tail_bottom_y
+            - bubble_size
+            - int(8 * 0.8),  # Position bubble above tail point
             bubble_size,
-            bubble_size
+            bubble_size,
         )
-        
+
         # Draw bubble background (white)
         pygame.draw.ellipse(screen, (255, 255, 255), bubble_rect)
         pygame.draw.ellipse(screen, (0, 0, 0), bubble_rect, width=2)
-        
+
         # Draw "!" text centered in the middle of the bubble
-        exclamation_font = pygame.font.Font("resources/roboto_fonts/Roboto-Bold.ttf", int(24 * 0.8))
+        exclamation_font = pygame.font.Font(
+            "resources/roboto_fonts/Roboto-Bold.ttf", int(24 * 0.8)
+        )
         exclamation_surface = exclamation_font.render("!", True, (0, 0, 0))
         exclamation_x = bubble_rect.centerx - exclamation_surface.get_width() // 2
         # Position "!" in the center of the bubble
         exclamation_y = bubble_rect.centery - exclamation_surface.get_height() // 2
         screen.blit(exclamation_surface, (exclamation_x, exclamation_y))
-        
+
         # Draw small tail pointing down from bottom of bubble to character
         tail_points = [
             (bubble_rect.centerx, bubble_rect.bottom),  # Top of tail (bottom of bubble)
             (sprite_pos[0] + int(30 * 0.8) - 5, tail_bottom_y),  # Bottom left of tail
-            (sprite_pos[0] + int(30 * 0.8) + 5, tail_bottom_y)   # Bottom right of tail
+            (sprite_pos[0] + int(30 * 0.8) + 5, tail_bottom_y),  # Bottom right of tail
         ]
         pygame.draw.polygon(screen, (255, 255, 255), tail_points)
         pygame.draw.polygon(screen, (0, 0, 0), tail_points, width=2)
-    
+
     def set_agent_thinking(self, agent_name, is_thinking):
         """Mark an agent as thinking or not thinking"""
         if is_thinking:
@@ -763,44 +904,44 @@ class ChatGUI:
         """Get all agent messages from the most recent round (after last 'You:' message)"""
         if not self.chat_history:
             return []
-        
+
         # Find the index of the last "You:" message
         last_user_idx = -1
         for i in range(len(self.chat_history) - 1, -1, -1):
             if self.chat_history[i].startswith("You:"):
                 last_user_idx = i
                 break
-        
+
         # Get all agent messages after the last user message
         latest_round = []
         for i in range(last_user_idx + 1, len(self.chat_history)):
             msg = self.chat_history[i]
             if not msg.startswith("You:"):
                 latest_round.append(msg)
-        
+
         return latest_round
-    
+
     def _draw_speech_bubbles(self, screen):
         """Draw speech bubbles above characters for the most recent round - one at a time"""
         latest_round = self._get_latest_round_messages()
-        
+
         # Reset bubble index if round changed (new messages arrived)
         if len(latest_round) != self.last_round_size:
             self.current_bubble_index_in_round = 0
             self.last_round_size = len(latest_round)
-        
+
         if not latest_round:
             return
-        
+
         # Clamp bubble index to valid range
         if self.current_bubble_index_in_round >= len(latest_round):
             self.current_bubble_index_in_round = len(latest_round) - 1
         if self.current_bubble_index_in_round < 0:
             self.current_bubble_index_in_round = 0
-        
+
         # Get the current message to display
         current_msg = latest_round[self.current_bubble_index_in_round]
-        
+
         # Extract speaker name and message
         parts = current_msg.split(":", 1)
         if len(parts) == 2:
@@ -811,13 +952,13 @@ class ChatGUI:
                 # Position speech bubble above the character
                 bubble_x = sprite_pos[0] + int(30 * 0.8)  # Center above sprite
                 bubble_y = sprite_pos[1] - int(20 * 0.8)  # Above the sprite
-                
+
                 # Get scroll offset for this speaker
                 scroll_offset = self.speech_bubble_scroll_offsets.get(speaker, 0)
-                
+
                 # Draw speech bubble with fixed height and scrollbar
                 bubble_rect = self._draw_speech_bubble(
-                    screen, 
+                    screen,
                     message,
                     speaker,
                     (255, 255, 255),  # White background
@@ -826,26 +967,33 @@ class ChatGUI:
                     int(16 * 0.8),  # Smaller font size
                     self.speech_bubble_height,
                     scroll_offset,
-                    speaker  # Pass speaker name for scrollbar tracking
+                    speaker,  # Pass speaker name for scrollbar tracking
                 )
-                
+
                 # Position Next button at bottom right of the bubble (only if multiple bubbles)
                 latest_round = self._get_latest_round_messages()
                 if bubble_rect and len(latest_round) > 1:
                     # Update button text with current position
                     current_position = self.current_bubble_index_in_round + 1
                     total_responses = len(latest_round)
-                    button_text = f"Next Response ({current_position}/{total_responses})"
+                    button_text = (
+                        f"Next Response ({current_position}/{total_responses})"
+                    )
                     self.next_message_button.button.set_text(button_text)
-                    
-                    self.next_message_button.button.set_relative_position((
-                        bubble_rect.right - int(200 * 0.8),  # Position at right edge (wider button)
-                        bubble_rect.bottom + int(10 * 0.8)  # Below the bubble
-                    ))
+
+                    self.next_message_button.button.set_relative_position(
+                        (
+                            bubble_rect.right
+                            - int(200 * 0.8),  # Position at right edge (wider button)
+                            bubble_rect.bottom + int(10 * 0.8),  # Below the bubble
+                        )
+                    )
                 elif len(latest_round) <= 1:
                     # Hide button if only one message (position off-screen)
-                    self.next_message_button.button.set_relative_position((self.screen_width, self.screen_height))
-        
+                    self.next_message_button.button.set_relative_position(
+                        (self.screen_width, self.screen_height)
+                    )
+
         # Clean up scrollbars for speakers not currently displayed
         current_speaker = parts[0].strip() if len(parts) == 2 else None
         speakers_to_remove = []
@@ -860,21 +1008,33 @@ class ChatGUI:
                 del self.speech_bubble_scroll_offsets[speaker_key]
             if speaker_key in self.speech_bubble_rects:
                 del self.speech_bubble_rects[speaker_key]
-    
-    def _draw_speech_bubble(self, screen, text, speaker_name, bg_colour, text_colour, pos, size, max_height, scroll_offset, speaker_key=None):
+
+    def _draw_speech_bubble(
+        self,
+        screen,
+        text,
+        speaker_name,
+        bg_colour,
+        text_colour,
+        pos,
+        size,
+        max_height,
+        scroll_offset,
+        speaker_key=None,
+    ):
         """Draw a speech bubble with text, fixed height, and pygame-gui scrollbar"""
         if speaker_key is None:
             speaker_key = speaker_name
-        
+
         font = pygame.font.Font("resources/roboto_fonts/Roboto-Regular.ttf", size)
         name_font = pygame.font.Font("resources/roboto_fonts/Roboto-Bold.ttf", size)
-        
+
         # Wrap text to fit within max width (increased for larger bubble)
         max_width = int(350 * 0.8)  # Wider for larger bubble
         words = text.split()
         lines = []
         current_line = ""
-        
+
         for word in words:
             test_line = current_line + (" " if current_line else "") + word
             if font.size(test_line)[0] <= max_width:
@@ -885,129 +1045,162 @@ class ChatGUI:
                 current_line = word
         if current_line:
             lines.append(current_line)
-        
+
         if not lines:
             lines = [text]
-        
+
         # Render text lines
         text_surfaces = [font.render(line, True, text_colour) for line in lines]
         line_height = font.get_linesize()
-        total_text_height = sum(surf.get_height() for surf in text_surfaces) + (len(text_surfaces) - 1) * 5
-        
+        total_text_height = (
+            sum(surf.get_height() for surf in text_surfaces)
+            + (len(text_surfaces) - 1) * 5
+        )
+
         # Calculate background rectangle with fixed height (larger bubble)
-        max_text_width = max(surf.get_width() for surf in text_surfaces) if text_surfaces else max_width
+        max_text_width = (
+            max(surf.get_width() for surf in text_surfaces)
+            if text_surfaces
+            else max_width
+        )
         bg_rect = pygame.Rect(
             pos[0] - max_text_width // 2 - 10,
             pos[1] - max_height - 10,
             max_text_width + 60,  # Extra width for wider scrollbar and larger bubble
-            max_height
+            max_height,
         )
         self.speech_bubble_rects[speaker_key] = bg_rect  # Store for this speaker
-        
+
         # Draw background (speech bubble)
         pygame.draw.rect(screen, bg_colour, bg_rect, border_radius=10)
         pygame.draw.rect(screen, text_colour, bg_rect, width=2, border_radius=10)
-        
+
         # Draw speaker name at top
         name_surface = name_font.render(speaker_name, True, text_colour)
         name_x = bg_rect.x + (bg_rect.width - name_surface.get_width()) // 2
         screen.blit(name_surface, (name_x, bg_rect.y + 5))
-        
+
         # Define scrollbar width first (wider for easier clicking)
         scrollbar_width = int(25 * 0.8)  # Wider scrollbar for easier clicking
-        
+
         # Create clipping rectangle for text area
         text_area_rect = pygame.Rect(
             bg_rect.x + 10,
             bg_rect.y + name_surface.get_height() + 10,
             bg_rect.width - scrollbar_width - 15,  # Leave space for wider scrollbar
-            bg_rect.height - name_surface.get_height() - 15
+            bg_rect.height - name_surface.get_height() - 15,
         )
-        
+
         # Create or update pygame-gui scrollbar with padding
         # Add extra padding to ensure last line is fully visible
         padding = int(100 * 0.8)  # Even more padding so last line is fully visible
-        scrollable_height = total_text_height + padding  # Add padding so last line is fully visible
-        
+        scrollable_height = (
+            total_text_height + padding
+        )  # Add padding so last line is fully visible
+
         if scrollable_height > text_area_rect.height:
             scrollbar_rect = pygame.Rect(
                 bg_rect.right - scrollbar_width - 8,  # More spacing from edge
                 text_area_rect.y,
                 scrollbar_width,
-                text_area_rect.height
+                text_area_rect.height,
             )
-            
+
             # Calculate visible percentage accounting for padding
             visible_percentage = text_area_rect.height / scrollable_height
-            
+
             # Create scrollbar if it doesn't exist or needs repositioning for this speaker
-            if speaker_key not in self.speech_bubble_scrollbars or self.speech_bubble_scrollbars[speaker_key] is None:
-                self.speech_bubble_scrollbars[speaker_key] = pygame_gui.elements.UIVerticalScrollBar(
-                    relative_rect=scrollbar_rect,
-                    visible_percentage=visible_percentage,
-                    manager=self.manager
+            if (
+                speaker_key not in self.speech_bubble_scrollbars
+                or self.speech_bubble_scrollbars[speaker_key] is None
+            ):
+                self.speech_bubble_scrollbars[speaker_key] = (
+                    pygame_gui.elements.UIVerticalScrollBar(
+                        relative_rect=scrollbar_rect,
+                        visible_percentage=visible_percentage,
+                        manager=self.manager,
+                    )
                 )
-                self.speech_bubble_scrollbars[speaker_key].scroll_position = scroll_offset
+                self.speech_bubble_scrollbars[speaker_key].scroll_position = (
+                    scroll_offset
+                )
             else:
                 # Update scrollbar position and size
-                self.speech_bubble_scrollbars[speaker_key].set_relative_position(scrollbar_rect.topleft)
-                self.speech_bubble_scrollbars[speaker_key].set_dimensions((scrollbar_width, text_area_rect.height))
-                self.speech_bubble_scrollbars[speaker_key].visible_percentage = visible_percentage
+                self.speech_bubble_scrollbars[speaker_key].set_relative_position(
+                    scrollbar_rect.topleft
+                )
+                self.speech_bubble_scrollbars[speaker_key].set_dimensions(
+                    (scrollbar_width, text_area_rect.height)
+                )
+                self.speech_bubble_scrollbars[speaker_key].visible_percentage = (
+                    visible_percentage
+                )
                 # Update scroll position from scrollbar
-                self.speech_bubble_scroll_offsets[speaker_key] = self.speech_bubble_scrollbars[speaker_key].scroll_position
+                self.speech_bubble_scroll_offsets[speaker_key] = (
+                    self.speech_bubble_scrollbars[speaker_key].scroll_position
+                )
                 scroll_offset = self.speech_bubble_scroll_offsets[speaker_key]
         else:
             # Remove scrollbar if not needed for this speaker
-            if speaker_key in self.speech_bubble_scrollbars and self.speech_bubble_scrollbars[speaker_key]:
+            if (
+                speaker_key in self.speech_bubble_scrollbars
+                and self.speech_bubble_scrollbars[speaker_key]
+            ):
                 self.speech_bubble_scrollbars[speaker_key].kill()
                 self.speech_bubble_scrollbars[speaker_key] = None
             scroll_offset = 0
-        
+
         # Draw text with clipping and scrolling
         clip_rect = screen.get_clip()
         screen.set_clip(text_area_rect)
-        
+
         # Calculate max scroll to include padding so last line is fully visible
         max_scroll = max(0, scrollable_height - text_area_rect.height)
         scroll_offset = max(0, min(scroll_offset, max_scroll))
-        
+
         y_offset = text_area_rect.y - scroll_offset
         for text_surface in text_surfaces:
             # Show text if it's within the visible area (with generous margin)
-            if y_offset + text_surface.get_height() >= text_area_rect.y - 10 and y_offset <= text_area_rect.bottom + 10:
-                x_pos = text_area_rect.x + (text_area_rect.width - text_surface.get_width()) // 2
+            if (
+                y_offset + text_surface.get_height() >= text_area_rect.y - 10
+                and y_offset <= text_area_rect.bottom + 10
+            ):
+                x_pos = (
+                    text_area_rect.x
+                    + (text_area_rect.width - text_surface.get_width()) // 2
+                )
                 screen.blit(text_surface, (x_pos, y_offset))
             y_offset += text_surface.get_height() + 5
-        
+
         screen.set_clip(clip_rect)
-        
+
         # Draw tail pointing to character
         tail_points = [
             (pos[0], bg_rect.bottom),
             (pos[0] - 10, bg_rect.bottom + 10),
-            (pos[0] + 10, bg_rect.bottom + 10)
+            (pos[0] + 10, bg_rect.bottom + 10),
         ]
         pygame.draw.polygon(screen, bg_colour, tail_points)
         pygame.draw.polygon(screen, text_colour, tail_points, width=2)
-        
+
         return bg_rect
-    
+
     def _draw_microphone_indicator(self, screen):
         """Draw a microphone icon below the textbox that flashes green when loud audio is detected, red when voice mode is off"""
         # Position below the textbox, centered
-        mic_size = int(30 * 0.8)
-        mic_x = self.main_input_box.rect.x + self.main_input_box.rect.width // 2 - mic_size // 2
-        mic_y = self.main_input_box.rect.bottom + int(15 * 0.8)
-        
+        mic_size = int(50 * 0.8)
+        mic_x = self.screen_width / 2 - mic_size / 2
+        mic_y = self.screen_height - 175
+
         # Store rect for click detection (make it slightly larger for easier clicking)
         click_padding = int(10 * 0.8)
         self.mic_rect = pygame.Rect(
             mic_x - click_padding,
             mic_y - click_padding,
             mic_size + (click_padding * 2),
-            mic_size + (click_padding * 2)
+            mic_size + (click_padding * 2),
         )
-        
+
         # If voice mode is inactive, show red
         if not self.voice_mode_active:
             mic_color = (200, 50, 50)  # Red when voice mode is deactivated
@@ -1016,71 +1209,104 @@ class ChatGUI:
             audio_level = 0.0
             if self.speech_recognizer:
                 audio_level = self.speech_recognizer.get_audio_level()
-            
+
             # Threshold for "loud" audio (adjust as needed, 0.05 = 5% of max volume)
             loud_threshold = 0.05
-            
+
             # Color: green when loud audio detected, gray when quiet
-            if audio_level > loud_threshold:
+            if (
+                time.time() - self.voice_detected_time < 1
+                or audio_level > loud_threshold
+            ):
                 # Active state - green color (brightness based on audio level)
                 # Scale green intensity based on audio level
-                intensity = min(255, int(50 + (audio_level * 200)))
-                mic_color = (50, intensity, 50)  # Green when active, brighter = louder
+                mic_color = (50, 250, 50)  # Green when active, brighter = louder
+                if audio_level > loud_threshold:
+                    self.set_voice_detected()
             else:
+                print("BYE")
                 # Idle state - gray color
                 mic_color = (150, 150, 150)  # Gray when idle
-        
+
         # Draw microphone icon (simple shape)
         # Microphone body (rectangle)
         body_width = int(mic_size * 0.4)
         body_height = int(mic_size * 0.7)
         body_x = mic_x + (mic_size - body_width) // 2
         body_y = mic_y
-        pygame.draw.rect(screen, mic_color, (body_x, body_y, body_width, body_height), border_radius=3)
-        
+        pygame.draw.rect(
+            screen,
+            mic_color,
+            (body_x, body_y, body_width, body_height),
+            border_radius=3,
+        )
+
         # Microphone stand (base)
         stand_width = int(mic_size * 0.6)
         stand_height = int(mic_size * 0.15)
         stand_x = mic_x + (mic_size - stand_width) // 2
         stand_y = mic_y + body_height
-        pygame.draw.rect(screen, mic_color, (stand_x, stand_y, stand_width, stand_height), border_radius=2)
-        
+        pygame.draw.rect(
+            screen,
+            mic_color,
+            (stand_x, stand_y, stand_width, stand_height),
+            border_radius=2,
+        )
+
         # Microphone grille lines (optional detail)
         for i in range(3):
             line_y = body_y + int(body_height * (0.3 + i * 0.2))
-            pygame.draw.line(screen, mic_color, 
-                           (body_x + 2, line_y), 
-                           (body_x + body_width - 2, line_y), 
-                           width=1)
-    
+            pygame.draw.line(
+                screen,
+                mic_color,
+                (body_x + 2, line_y),
+                (body_x + body_width - 2, line_y),
+                width=1,
+            )
+
     def set_voice_detected(self):
         """Call this when voice input is detected to update the indicator"""
         import time
+
         self.voice_detected_time = time.time()
-    
+
+    def get_voice_detected(self):
+        """Return voice_detected_time"""
+        return self.voice_detected_time
+
     def is_voice_mode_active(self):
         """Check if voice mode is currently active"""
         return self.voice_mode_active
 
 
 class AdvocateSelectionScreen:
-    def __init__(self, screen_width, screen_height, custom_advocates, default_agents=None):
+    def __init__(
+        self, screen_width, screen_height, custom_advocates, default_agents=None
+    ):
         self.screen_width = screen_width
         self.screen_height = screen_height
         self.manager = pygame_gui.UIManager((screen_width, screen_height))
         self.custom_advocates = custom_advocates
-        self.default_agents = default_agents or {}  # Keep for reference but don't display
-        
-        self.font_title = pygame.font.Font("resources/roboto_fonts/Roboto-Bold.ttf", int(48 * 0.8))
-        self.font_label = pygame.font.Font("resources/roboto_fonts/Roboto-Regular.ttf", int(32 * 0.8))
-        self.font_small = pygame.font.Font("resources/roboto_fonts/Roboto-Regular.ttf", int(24 * 0.8))
-        
+        self.default_agents = (
+            default_agents or {}
+        )  # Keep for reference but don't display
+
+        self.font_title = pygame.font.Font(
+            "resources/roboto_fonts/Roboto-Bold.ttf", int(48 * 0.8)
+        )
+        self.font_label = pygame.font.Font(
+            "resources/roboto_fonts/Roboto-Regular.ttf", int(32 * 0.8)
+        )
+        self.font_small = pygame.font.Font(
+            "resources/roboto_fonts/Roboto-Regular.ttf", int(24 * 0.8)
+        )
+
         # Scrollable area
         self.scroll_offset = 0
         self.scroll_speed = 50
         self.item_height = int(70 * 0.8)
         self.visible_items = int((screen_height - int(200 * 0.8)) / self.item_height)
-        
+
         # Create buttons ONLY for custom advocates (not default justices)
         self.advocate_buttons = []
         self.delete_buttons = []  # Only for custom advocates
@@ -1089,7 +1315,7 @@ class AdvocateSelectionScreen:
         button_width = int(400 * 0.8)
         delete_button_width = int(100 * 0.8)
         y_padding = int(70 * 0.8)
-        
+
         # Add ONLY custom advocates (no default justices)
         for i, advocate in enumerate(custom_advocates):
             y_pos = self.start_y + i * y_padding
@@ -1097,76 +1323,93 @@ class AdvocateSelectionScreen:
                 self.screen_width / 2 - button_width / 2,
                 y_pos,
                 button_width,
-                button_height
+                button_height,
             )
             button = Button(
-                button_rect.x, button_rect.y, button_rect.width, button_rect.height,
-                advocate.name, self.manager, color=(100, 150, 200)
+                button_rect.x,
+                button_rect.y,
+                button_rect.width,
+                button_rect.height,
+                advocate.name,
+                self.manager,
+                color=(100, 150, 200),
             )
             button.advocate_name = advocate.name
             button.is_custom = True
             self.advocate_buttons.append(button)
-            
+
             # Add delete button for custom advocates
             delete_rect = pygame.Rect(
                 button_rect.right + int(10 * 0.8),
                 y_pos,
                 delete_button_width,
-                button_height
+                button_height,
             )
             delete_button = Button(
-                delete_rect.x, delete_rect.y, delete_rect.width, delete_rect.height,
-                "Delete", self.manager, color=(200, 50, 50)
+                delete_rect.x,
+                delete_rect.y,
+                delete_rect.width,
+                delete_rect.height,
+                "Delete",
+                self.manager,
+                color=(200, 50, 50),
             )
             delete_button.advocate_name = advocate.name
             self.delete_buttons.append(delete_button)
-        
+
         # Back button - match create advocate page style
         back_rect = pygame.Rect(
-            int(20 * 0.8),
-            int(20 * 0.8),
-            int(40 * 0.8),
-            int(40 * 0.8)
+            int(20 * 0.8), int(20 * 0.8), int(40 * 0.8), int(40 * 0.8)
         )
         self.back_button = Button(
-            back_rect.x, back_rect.y, back_rect.width, back_rect.height,
-            "<", self.manager
+            back_rect.x,
+            back_rect.y,
+            back_rect.width,
+            back_rect.height,
+            "<",
+            self.manager,
         )
 
     def handle_event(self, event):
         self.manager.process_events(event)
-        
+
         # Handle scrolling
         if event.type == pygame.MOUSEWHEEL:
-            max_scroll = max(0, len(self.advocate_buttons) * self.item_height - (self.screen_height - int(200 * 0.8)))
-            self.scroll_offset = max(0, min(self.scroll_offset - event.y * self.scroll_speed, max_scroll))
+            max_scroll = max(
+                0,
+                len(self.advocate_buttons) * self.item_height
+                - (self.screen_height - int(200 * 0.8)),
+            )
+            self.scroll_offset = max(
+                0, min(self.scroll_offset - event.y * self.scroll_speed, max_scroll)
+            )
             # Update button positions based on scroll
             self._update_button_positions()
-        
+
         if self.back_button.is_clicked(event):
             return "back"
-        
+
         # Check delete buttons first
         for delete_button in self.delete_buttons:
             if delete_button.is_clicked(event):
                 return ("delete", delete_button.advocate_name)
-        
+
         # Check selection buttons
         for button in self.advocate_buttons:
             if button.is_clicked(event):
                 return button.advocate_name
-        
+
         return None
-    
+
     def _update_button_positions(self):
         """Update button positions based on scroll offset."""
         y_padding = int(70 * 0.8)
-        
+
         for i, button in enumerate(self.advocate_buttons):
             y_pos = self.start_y + i * y_padding - self.scroll_offset
             button.rect.y = y_pos
             button.button.set_position((button.rect.x, y_pos))
-        
+
         # Update delete button positions
         for i, delete_button in enumerate(self.delete_buttons):
             y_pos = self.start_y + i * y_padding - self.scroll_offset
@@ -1176,34 +1419,51 @@ class AdvocateSelectionScreen:
     def draw(self, screen):
         # Match create advocate page aesthetic - dark blue background
         screen.fill((20, 20, 40))  # Dark blue background
-        
+
         title_surface = self.font_title.render(
             "Select a Custom Justice", True, (255, 255, 255)  # White text
         )
-        screen.blit(title_surface, (self.screen_width / 2 - title_surface.get_width() / 2, int(50 * 0.8)))
-        
+        screen.blit(
+            title_surface,
+            (self.screen_width / 2 - title_surface.get_width() / 2, int(50 * 0.8)),
+        )
+
         # Show message if no custom advocates
         if not self.custom_advocates:
             no_advocates_label = self.font_label.render(
                 "No custom justices created yet.", True, (255, 255, 255)
             )
-            screen.blit(no_advocates_label, (self.screen_width / 2 - no_advocates_label.get_width() / 2, self.start_y))
-        
+            screen.blit(
+                no_advocates_label,
+                (
+                    self.screen_width / 2 - no_advocates_label.get_width() / 2,
+                    self.start_y,
+                ),
+            )
+
         # Draw scrollable area
-        clip_rect = pygame.Rect(0, int(120 * 0.8), self.screen_width, self.screen_height - int(120 * 0.8))
+        clip_rect = pygame.Rect(
+            0, int(120 * 0.8), self.screen_width, self.screen_height - int(120 * 0.8)
+        )
         screen.set_clip(clip_rect)
-        
+
         for button in self.advocate_buttons:
-            if button.rect.bottom >= clip_rect.top and button.rect.top <= clip_rect.bottom:
+            if (
+                button.rect.bottom >= clip_rect.top
+                and button.rect.top <= clip_rect.bottom
+            ):
                 button.draw(screen)
-        
+
         for delete_button in self.delete_buttons:
-            if delete_button.rect.bottom >= clip_rect.top and delete_button.rect.top <= clip_rect.bottom:
+            if (
+                delete_button.rect.bottom >= clip_rect.top
+                and delete_button.rect.top <= clip_rect.bottom
+            ):
                 delete_button.draw(screen)
-        
+
         screen.set_clip(None)
-        
+
         self.back_button.draw(screen)
-        
+
         self.manager.update(pygame.time.get_ticks() / 1000.0)
         self.manager.draw_ui(screen)
