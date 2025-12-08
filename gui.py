@@ -18,6 +18,7 @@ class Button:
         self.button = pygame_gui.elements.UIButton(
             relative_rect=self.rect, text="", manager=manager
         )
+        self._visible = True
         button_font_size = max(MIN_FONT_SIZE, int(20 * 0.8))
         self.font = pygame.font.Font(
             "resources/roboto_fonts/Roboto-Bold.ttf", button_font_size
@@ -51,6 +52,8 @@ class Button:
         self.button.set_relative_position(pos)
 
     def draw_label(self, screen):
+        if not self.is_visible():
+            return
         text_rect = self.label_surface.get_rect(center=self.rect.center)
         screen.blit(self.label_surface, text_rect)
 
@@ -59,6 +62,28 @@ class Button:
             self.label = new_label
             self.label_surface = self.font.render(self.label, True, (255, 255, 255))
             self._ensure_size_for_label()
+
+    def hide(self):
+        """Hide the underlying pygame-gui button."""
+        self._visible = False
+        try:
+            self.button.hide()
+        except Exception:
+            self.button.visible = 0
+
+    def show(self):
+        """Show the underlying pygame-gui button."""
+        self._visible = True
+        try:
+            self.button.show()
+        except Exception:
+            self.button.visible = 1
+
+    def is_visible(self):
+        try:
+            return bool(self.button.visible)
+        except Exception:
+            return self._visible
 
     def is_clicked(self, event):
         if event.type == pygame_gui.UI_BUTTON_PRESSED:
@@ -649,6 +674,8 @@ class ChatGUI:
             "Next Response",
             self.manager,
         )
+        # Keep next button hidden until multiple responses exist
+        self.next_message_button.hide()
 
     def _create_checkboxes(self):
         checkboxes = []
@@ -786,14 +813,9 @@ class ChatGUI:
         # Draw microphone indicator
         self._draw_microphone_indicator(screen)
 
-        # Only draw next button if there are multiple messages in the latest round
         latest_round = self._get_latest_round_messages()
-        if len(latest_round) > 1:
-            # Update button text to show current position and total
-            current_position = self.current_bubble_index_in_round + 1
-            total_responses = len(latest_round)
-            button_text = f"Next Response ({current_position}/{total_responses})"
-            self.next_message_button.set_label(button_text)
+        if len(latest_round) <= 1:
+            self.next_message_button.hide()
 
         screen.blit(self.checkbox_label, (int(40 * 0.8), int(40 * 0.8)))
         for checkbox in self.checkboxes:
@@ -809,7 +831,7 @@ class ChatGUI:
         self.submit_button.draw_label(screen)
         self.create_advocate_button.draw_label(screen)
         self.select_advocate_button.draw_label(screen)
-        if len(latest_round) > 1:
+        if len(latest_round) > 1 and self.next_message_button.is_visible():
             self.next_message_button.draw_label(screen)
 
     def _get_sprite_pos(self, agent_name):
@@ -1014,6 +1036,9 @@ class ChatGUI:
 
     def _draw_speech_bubbles(self, screen):
         """Draw speech bubbles above characters for the most recent round - one at a time"""
+        # Hide next button by default; it will be shown only when needed
+        self.next_message_button.hide()
+
         latest_round = self._get_latest_round_messages()
 
         # Reset bubble index if round changed (new messages arrived)
@@ -1022,6 +1047,7 @@ class ChatGUI:
             self.last_round_size = len(latest_round)
 
         if not latest_round:
+            self.next_message_button.hide()
             return
 
         # Clamp bubble index to valid range
@@ -1072,6 +1098,7 @@ class ChatGUI:
                     )
                     self.next_message_button.set_label(button_text)
 
+                    self.next_message_button.show()
                     self.next_message_button.set_position(
                         (
                             bubble_rect.right - self.next_message_button.rect.width,
@@ -1079,10 +1106,8 @@ class ChatGUI:
                         )
                     )
                 elif len(latest_round) <= 1:
-                    # Hide button if only one message (position off-screen)
-                    self.next_message_button.set_position(
-                        (self.screen_width, self.screen_height)
-                    )
+                    # Hide button if only one message
+                    self.next_message_button.hide()
 
         # Clean up scrollbars for speakers not currently displayed
         current_speaker = parts[0].strip() if len(parts) == 2 else None
