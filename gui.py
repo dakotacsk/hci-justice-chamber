@@ -93,8 +93,12 @@ class CheckBox:
         except:
             pass
 
-    def handle_event(self, event):
+    def handle_event(self, event, button):
         # Listen for checkbox state changes
+        if event.type == pygame.KEYDOWN:
+            if event.key == button:
+                self._checked = not self._checked
+                self.checkbox.set_state(self._checked)
         if event.type == pygame_gui.UI_CHECK_BOX_CHECKED:
             if event.ui_element == self.checkbox:
                 self._checked = True
@@ -442,7 +446,7 @@ class ChatGUI:
         # Load mystery justice sprite for custom justices
         self.mystery_sprite = pygame.transform.scale(
             pygame.image.load("resources/sprites/mystery_justice.png").convert_alpha(),
-            (int(60 * 0.8), int(100 * 0.8)),
+            (int(80 * 0.8), int(120 * 0.8)),
         )
 
         # Track which custom justice is currently selected (only one at a time)
@@ -492,6 +496,9 @@ class ChatGUI:
         )
         self.voice_mode_active = True  # Track whether voice mode is active
         self.mic_rect = None  # Store microphone rect for click detection
+
+        # Hold space bar for mic text
+        self.hold_text = self.font.render("Hold space bar to talk", True, (85, 85, 85))
 
         input_box_x = int((1560 - 40 - 500) * 0.8)
         input_box_y = int(40 * 0.8)
@@ -567,6 +574,8 @@ class ChatGUI:
             True,
             (20, 20, 20),  # Black text for visibility
         )
+        self.checkboxes[0]._checked = True
+        self.checkboxes[0].checkbox.set_state(True)
 
         # Next button will be positioned dynamically next to speech bubble
         # Create it initially, position will be updated when bubble is drawn
@@ -600,8 +609,9 @@ class ChatGUI:
 
     def handle_event(self, event):
         self.manager.process_events(event)
-        for checkbox in self.checkboxes:
-            checkbox.handle_event(event)
+        button = [pygame.K_q, pygame.K_w, pygame.K_e, pygame.K_r, pygame.K_t]
+        for i, checkbox in enumerate(self.checkboxes):
+            checkbox.handle_event(event, button[i])
 
         # Handle next button for cycling through messages
         if self.next_message_button.is_clicked(event):
@@ -1206,7 +1216,7 @@ class ChatGUI:
         # Position below the textbox, centered
         mic_size = int(50 * 0.8)
         mic_x = self.screen_width / 2 - mic_size / 2
-        mic_y = self.screen_height - 175
+        mic_y = self.screen_height - 130
 
         # Store rect for click detection (make it slightly larger for easier clicking)
         click_padding = int(10 * 0.8)
@@ -1220,6 +1230,10 @@ class ChatGUI:
         # If voice mode is inactive, show red
         if not self.voice_mode_active:
             mic_color = (200, 50, 50)  # Red when voice mode is deactivated
+            text_rect = self.hold_text.get_rect()
+            text_rect.top = self.screen_height - 90
+            text_rect.centerx = self.screen_width / 2
+            self.screen.blit(self.hold_text, text_rect)
         else:
             # Get current audio level from speech recognizer
             audio_level = 0.0
