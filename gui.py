@@ -510,6 +510,21 @@ class ChatGUI:
             placeholder="Your voice input will appear here (ask a question about justice)",
         )
 
+        submit_rect = pygame.Rect(
+            input_box_x + input_box_width - int(120 * 0.8),
+            input_box_y + input_box_height + int(10 * 0.8),
+            int(120 * 0.8),
+            int(40 * 0.8),
+        )
+        self.submit_button = Button(
+            submit_rect.x,
+            submit_rect.y,
+            submit_rect.width,
+            submit_rect.height,
+            "Submit",
+            self.manager,
+        )
+
         create_rect = pygame.Rect(
             self.screen_width - int(440 * 0.8),
             self.screen_height - int(60 * 0.8),
@@ -694,6 +709,7 @@ class ChatGUI:
                     break
 
         self.main_input_box.draw(screen)
+        self.submit_button.draw(screen)
         self.create_advocate_button.draw(screen)
         self.select_advocate_button.draw(screen)
 
