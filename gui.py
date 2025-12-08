@@ -1296,7 +1296,7 @@ class ChatGUI:
         if not self.voice_mode_active:
             mic_color = (200, 50, 50)  # Red when voice mode is deactivated
             text_rect = self.hold_text.get_rect()
-            text_rect.top = self.screen_height - 90
+            text_rect.top = self.screen_height - 87
             text_rect.centerx = self.screen_width / 2
             self.screen.blit(self.hold_text, text_rect)
         else:
@@ -1319,7 +1319,6 @@ class ChatGUI:
                 if audio_level > loud_threshold:
                     self.set_voice_detected()
             else:
-                print("BYE")
                 # Idle state - gray color
                 mic_color = (150, 150, 150)  # Gray when idle
 
@@ -1456,9 +1455,7 @@ class AdvocateSelectionScreen:
             self.delete_buttons.append(delete_button)
 
         # Back button - match create advocate page style
-        back_rect = pygame.Rect(
-            20, 20, 50, 50
-        )
+        back_rect = pygame.Rect(20, 20, 50, 50)
         self.back_button = Button(
             back_rect.x,
             back_rect.y,

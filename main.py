@@ -9,6 +9,7 @@ from agent import JusticeAgent
 from config import AGENTS, AgentProfile
 from gui import ChatGUI, CreationForm, AdvocateSelectionScreen
 from audio import SpeechRecognizer
+from speech2text import Speech2Text
 
 CSV_FILE = "advocates.csv"
 
@@ -128,6 +129,8 @@ def main():
     # Initialize speech recognizer
     speech = SpeechRecognizer()
     speech.start()
+
+    speech2text = Speech2Text()
 
     SCREEN_WIDTH, SCREEN_HEIGHT = 1248, 702
     screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
@@ -254,6 +257,7 @@ def main():
                                     f"{agent.profile.name}: {reply}"
                                 )
                                 print(f"{agent.profile.name}: {reply}")
+                                speech2text.speak(reply)
                             except Exception as exc:
                                 print(
                                     f"{agent.profile.name} generated an exception: {exc}"
