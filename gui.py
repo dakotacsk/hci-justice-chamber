@@ -701,7 +701,7 @@ class ChatGUI:
 
     def handle_event(self, event):
         self.manager.process_events(event)
-        button = [pygame.K_q, pygame.K_w, pygame.K_e, pygame.K_r, pygame.K_t]
+        button = [pygame.K_LEFT, pygame.K_UP, pygame.K_RIGHT, pygame.K_DOWN, pygame.K_t]
         for i, checkbox in enumerate(self.checkboxes):
             checkbox.handle_event(event, button[i])
 
