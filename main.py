@@ -132,7 +132,7 @@ def main():
 
     speech2text = Speech2Text()
 
-    SCREEN_WIDTH, SCREEN_HEIGHT = 1248, 702
+    SCREEN_WIDTH, SCREEN_HEIGHT = 1728, 972
     screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
 
     # --- Initial State Setup ---
@@ -207,12 +207,19 @@ def main():
             # Wait 2 seconds to process detected voice
             new_speech = speech.get_latest_text()
             if new_speech:
+                speech.listening_enabled = False
                 print(f"Voice command: {new_speech}")
+
+                chat_gui.set_caption(f"You: {new_speech}")
+                chat_gui.draw(screen)
+                pygame.display.update()
+
+                time.sleep(1.5)
 
                 chat_gui.chat_history.append(f"You: {new_speech}")
                 print(f"\nYou: {new_speech}")
 
-                chat_gui.main_input_box.text = new_speech
+                # chat_gui.main_input_box.text = new_speech
 
                 active_agents = [
                     agent
@@ -249,6 +256,7 @@ def main():
                             executor.submit(agent.generate_response, session_id): agent
                             for agent in batch
                         }
+                        count = 0
                         for future in concurrent.futures.as_completed(futures):
                             agent = futures[future]
                             try:
@@ -257,7 +265,20 @@ def main():
                                     f"{agent.profile.name}: {reply}"
                                 )
                                 print(f"{agent.profile.name}: {reply}")
-                                speech2text.speak(reply)
+                                chat_gui.current_speaker = agent.profile.name
+                                chat_gui.set_caption(f"{agent.profile.name}: {reply}")
+                                chat_gui.draw(screen)
+                                pygame.display.update()
+                                """chat_gui._draw_speech_bubbles(screen)
+                                pygame.display.update()
+                                if count != 0:
+                                    print("NEXT MESSAGE")
+                                    chat_gui._next_message()
+                                    chat_gui._draw_speech_bubbles(screen)
+                                    pygame.display.update()
+                                """
+                                speech2text.speak(reply, agent.profile.name)
+                                chat_gui.current_speaker = ""
                             except Exception as exc:
                                 print(
                                     f"{agent.profile.name} generated an exception: {exc}"
@@ -265,6 +286,7 @@ def main():
                             finally:
                                 # Mark agent as done thinking
                                 chat_gui.set_agent_thinking(agent.profile.name, False)
+                            count = count + 1
 
                     # Add a small delay between batches to avoid rate limiting
                     if i + batch_size < len(active_agents):
@@ -279,9 +301,10 @@ def main():
                 if result == "select_advocate":
                     app_state = "ADVOCATE_SELECTION"
                     break
-                if chat_gui.create_advocate_button.is_clicked(event):
-                    app_state = "CREATION"
-                    break
+                if event.type == pygame.KEYDOWN:
+                    if event.key == pygame.K_t:
+                        app_state = "CREATION"
+                        break
             chat_gui.draw(screen)
 
         elif app_state == "CREATION":

@@ -504,19 +504,19 @@ class ChatGUI:
         self.sprites = {
             "Sam (Utilitarian)": pygame.transform.scale(
                 pygame.image.load("resources/sprites/utilitarian.png").convert_alpha(),
-                (int(60 * 0.8), int(100 * 0.8)),
+                (int(90 * 0.8), int(150 * 0.8)),
             ),
             "Amara (Restorative)": pygame.transform.scale(
                 pygame.image.load("resources/sprites/restorative.png").convert_alpha(),
-                (int(60 * 0.8), int(100 * 0.8)),
+                (int(90 * 0.8), int(150 * 0.8)),
             ),
             "Jamie (Meritocracy)": pygame.transform.scale(
                 pygame.image.load("resources/sprites/meritocracy.png").convert_alpha(),
-                (int(60 * 0.8), int(100 * 0.8)),
+                (int(90 * 0.8), int(150 * 0.8)),
             ),
             "Jordan (Rawlsian)": pygame.transform.scale(
                 pygame.image.load("resources/sprites/rawlsian.png").convert_alpha(),
-                (int(60 * 0.8), int(100 * 0.8)),
+                (int(90 * 0.8), int(150 * 0.8)),
             ),
         }
 
@@ -576,14 +576,14 @@ class ChatGUI:
         self.mic_rect = None  # Store microphone rect for click detection
 
         # Hold space bar for mic text
-        self.hold_text = self.font.render("Hold space bar to talk", True, (85, 85, 85))
+        self.hold_text = self.font.render("Unmute mic to talk", True, (85, 85, 85))
 
         input_box_x = int((1560 - 40 - 500) * 0.8)
         input_box_y = int(40 * 0.8)
         input_box_width = int(500 * 0.8)
         input_box_height = int(self.screen_height * 0.2)
 
-        self.main_input_box = TextInputBox(
+        """self.main_input_box = TextInputBox(
             input_box_x,
             input_box_y,
             input_box_width,
@@ -594,7 +594,7 @@ class ChatGUI:
             ),
             self.manager,
             placeholder="Your voice input will appear here (ask a question about justice)",
-        )
+        )"""
 
         submit_rect = pygame.Rect(
             input_box_x + input_box_width - 180,
@@ -602,14 +602,14 @@ class ChatGUI:
             180,
             50,
         )
-        self.submit_button = Button(
+        """self.submit_button = Button(
             submit_rect.x,
             submit_rect.y,
             submit_rect.width,
             submit_rect.height,
             "Submit",
             self.manager,
-        )
+        )"""
 
         button_margin = 20
         create_button_width = 460
@@ -620,14 +620,14 @@ class ChatGUI:
             create_button_width,
             create_button_height,
         )
-        self.create_advocate_button = Button(
+        """self.create_advocate_button = Button(
             create_rect.x,
             create_rect.y,
             create_rect.width,
             create_rect.height,
             "Create custom Justice Advocate",
             self.manager,
-        )
+        )"""
 
         # Add button to select/manage advocates
         select_button_width = create_button_width
@@ -638,7 +638,7 @@ class ChatGUI:
             select_button_width,
             select_button_height,
         )
-        self.select_advocate_button = Button(
+        """self.select_advocate_button = Button(
             select_rect.x,
             select_rect.y,
             select_rect.width,
@@ -646,7 +646,7 @@ class ChatGUI:
             "Select a custom Justice Advocate",
             self.manager,
             color=(100, 150, 200),
-        )
+        )"""
 
         # Removed prev/next buttons - not needed with speech bubbles
 
@@ -677,9 +677,14 @@ class ChatGUI:
         # Keep next button hidden until multiple responses exist
         self.next_message_button.hide()
 
+        self.current_caption = ""
+        self.caption_duration = 2000  # ms to display
+        self.caption_timestamp = 0
+        self.current_speaker = ""
+
     def _create_checkboxes(self):
         checkboxes = []
-        x, y = int(40 * 0.8), int(80 * 0.8)
+        x, y = int(60 * 0.8), int(100 * 0.8)
         for agent in self.agents.values():
             checkbox_rect = pygame.Rect(x, y, int(20 * 0.8), int(20 * 0.8))
             checkbox = CheckBox(
@@ -701,12 +706,13 @@ class ChatGUI:
             checkbox.handle_event(event, button[i])
 
         # Handle next button for cycling through messages
-        if self.next_message_button.is_clicked(event):
-            self._next_message()
+        """if self.next_message_button.is_clicked(event):
+            self._next_message()"""
 
         # Handle select advocate button
-        if self.select_advocate_button.is_clicked(event):
+        """if self.select_advocate_button.is_clicked(event):
             return "select_advocate"
+        """
 
         # Handle microphone button click
         if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
@@ -745,6 +751,77 @@ class ChatGUI:
                             )
                             self.speech_bubble_scroll_offsets[speaker] = new_scroll
                             break
+
+    def set_caption(self, text):
+        self.current_caption = text
+        self.caption_timestamp = pygame.time.get_ticks()
+
+    def draw_caption(self, screen):
+        # Hide caption after duration
+        if pygame.time.get_ticks() - self.caption_timestamp > self.caption_duration:
+            return
+
+        if not self.current_caption:
+            return
+
+        font = pygame.font.SysFont("Arial", 18, bold=True)
+
+        # ---------- WORD WRAP ----------
+        max_width = screen.get_width() - 80  # 40px padding each side
+        words = self.current_caption.split(" ")
+        lines = []
+        current_line = ""
+
+        for word in words:
+            # Test width if we add the new word
+            test_line = current_line + word + " "
+            if font.size(test_line)[0] <= max_width:
+                current_line = test_line
+            else:
+                # Current line full → push to list
+                lines.append(current_line.strip())
+                current_line = word + " "
+
+        # Add last line
+        if current_line:
+            lines.append(current_line.strip())
+        # --------------------------------
+
+        # Render each line
+        rendered_lines = [font.render(line, True, (255, 255, 255)) for line in lines]
+
+        # Calculate total height
+        line_height = rendered_lines[0].get_height()
+        total_height = len(rendered_lines) * line_height + (len(rendered_lines) - 1) * 4
+
+        # Position bottom centered
+        center_x = screen.get_width() // 2
+        base_y = screen.get_height() - 60
+
+        # Compute background rect
+        max_line_width = max(surface.get_width() for surface in rendered_lines)
+        padding = 12
+
+        bg_rect = pygame.Rect(
+            center_x - max_line_width // 2 - padding,
+            base_y - total_height - padding,
+            max_line_width + padding * 2,
+            total_height + padding * 2,
+        )
+
+        # Background (transparent black)
+        caption_bg = pygame.Surface((bg_rect.width, bg_rect.height), pygame.SRCALPHA)
+        caption_bg.fill((0, 0, 0, 150))
+
+        # Draw background
+        screen.blit(caption_bg, (bg_rect.x, bg_rect.y))
+
+        # Draw wrapped lines
+        y_offset = bg_rect.y + padding
+        for surf in rendered_lines:
+            x = center_x - surf.get_width() // 2
+            screen.blit(surf, (x, y_offset))
+            y_offset += line_height + 4  # small spacing
 
     def _get_current_message(self):
         """Get the current message being displayed"""
@@ -805,34 +882,35 @@ class ChatGUI:
                     self.current_message_index = i
                     break
 
-        self.main_input_box.draw(screen)
-        self.submit_button.draw(screen)
-        self.create_advocate_button.draw(screen)
-        self.select_advocate_button.draw(screen)
+        # self.main_input_box.draw(screen)
+        # self.create_advocate_button.draw(screen)
+        # self.select_advocate_button.draw(screen)
 
         # Draw microphone indicator
         self._draw_microphone_indicator(screen)
 
-        latest_round = self._get_latest_round_messages()
+        """latest_round = self._get_latest_round_messages()
         if len(latest_round) <= 1:
-            self.next_message_button.hide()
+            self.next_message_button.hide()"""
 
-        screen.blit(self.checkbox_label, (int(40 * 0.8), int(40 * 0.8)))
+        screen.blit(self.checkbox_label, (int(60 * 0.8), int(60 * 0.8)))
         for checkbox in self.checkboxes:
             checkbox.draw(screen)
 
         self._draw_sprites(screen)
 
         # Draw speech bubbles above characters (scrollbar updates handled within _draw_speech_bubble)
-        self._draw_speech_bubbles(screen)
+        # self._draw_speech_bubbles(screen)
+
+        # Draw caption
+        self.draw_caption(screen)
 
         self.manager.update(pygame.time.get_ticks() / 1000.0)
         self.manager.draw_ui(screen)
-        self.submit_button.draw_label(screen)
-        self.create_advocate_button.draw_label(screen)
-        self.select_advocate_button.draw_label(screen)
-        if len(latest_round) > 1 and self.next_message_button.is_visible():
-            self.next_message_button.draw_label(screen)
+        # self.create_advocate_button.draw_label(screen)
+        # self.select_advocate_button.draw_label(screen)
+        """if len(latest_round) > 1 and self.next_message_button.is_visible():
+            self.next_message_button.draw_label(screen)"""
 
     def _get_sprite_pos(self, agent_name):
         # Position justices in a pentagon formation around the table
@@ -842,7 +920,7 @@ class ChatGUI:
         # Use actual screen center, not scaled
         center_x = self.screen_width // 2  # Screen center X (624 for 1248px screen)
         center_y = self.screen_height // 2  # Screen center Y (351 for 702px screen)
-        radius = int(120 * 0.8)  # Smaller radius to bring them closer together
+        radius = int(200 * 0.8)  # Smaller radius to bring them closer together
 
         # Calculate pentagon positions (5 vertices evenly spaced around a circle)
         # Start at top and go clockwise
@@ -851,8 +929,8 @@ class ChatGUI:
         for i in range(5):
             angle = math.radians(-90 + i * 72)  # Start at top, go clockwise
             x = center_x + radius * math.cos(angle)
-            y = center_y + radius * math.sin(angle)
-            positions.append((int(x), int(y)))
+            y = center_y + radius * math.sin(angle) - 35
+            positions.append([int(x), int(y)])
 
         # Assign positions to justices
         # Order: Top, Top-right, Bottom-right, Bottom-left, Top-left
@@ -862,6 +940,13 @@ class ChatGUI:
             "Amara (Restorative)": positions[2],  # Bottom-right
             "Sam (Utilitarian)": positions[3],  # Bottom-left
         }
+
+        sprite_positions["Sam (Utilitarian)"][0] = sprite_positions[
+            "Sam (Utilitarian)"
+        ][0] - int(70 * 0.8)
+        sprite_positions["Jamie (Meritocracy)"][0] = sprite_positions[
+            "Sam (Utilitarian)"
+        ][0] - int(70 * 0.8)
 
         # Custom justice gets the 5th position (top-left)
         if agent_name == self.selected_custom_justice:
@@ -891,12 +976,12 @@ class ChatGUI:
                 if sprite_pos and sprite_surface:
                     screen.blit(sprite_surface, sprite_pos)
 
-                    # Draw blinking border if agent is thinking
+                    """# Draw blinking border if agent is thinking
                     if checkbox.label in self.thinking_agents:
-                        self._draw_thinking_border(screen, sprite_pos, sprite_surface)
+                        self._draw_thinking_border(screen, sprite_pos, sprite_surface)"""
 
                     # Draw "!" bubble if agent has a ready response that's not currently displayed
-                    if self._agent_has_ready_response(checkbox.label):
+                    if self.current_speaker == checkbox.label:
                         self._draw_exclamation_bubble(screen, sprite_pos)
 
     def _draw_thinking_border(self, screen, sprite_pos, sprite_surface):
@@ -1306,7 +1391,7 @@ class ChatGUI:
         # Position below the textbox, centered
         mic_size = int(50 * 0.8)
         mic_x = self.screen_width / 2 - mic_size / 2
-        mic_y = self.screen_height - 130
+        mic_y = self.screen_height - 130 - 60
 
         # Store rect for click detection (make it slightly larger for easier clicking)
         click_padding = int(10 * 0.8)
@@ -1321,9 +1406,10 @@ class ChatGUI:
         if not self.voice_mode_active:
             mic_color = (200, 50, 50)  # Red when voice mode is deactivated
             text_rect = self.hold_text.get_rect()
-            text_rect.top = self.screen_height - 87
+            text_rect.top = self.screen_height - 87 - 60
             text_rect.centerx = self.screen_width / 2
-            self.screen.blit(self.hold_text, text_rect)
+            if self.current_speaker == "":
+                self.screen.blit(self.hold_text, text_rect)
         else:
             # Get current audio level from speech recognizer
             audio_level = 0.0

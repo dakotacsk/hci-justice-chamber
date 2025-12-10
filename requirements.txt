@@ -6,3 +6,4 @@ pygame-gui>=0.6.0
 google-generativeai>=0.3.0
 gTTS
 playsound
+pydub
