@@ -21,7 +21,9 @@ class Speech2Text:
             "Amara (Restorative)": "com.au",
             "Sam (Utilitarian)": "ie",
         }
-        speech_object = gTTS(text=text, lang="en", slow=False, tld=accent[speaker])
+        # Use default accent "com" for custom advocates not in the dictionary
+        accent_tld = accent.get(speaker, "com")
+        speech_object = gTTS(text=text, lang="en", slow=False, tld=accent_tld)
         speech_object.save("response.mp3")
 
         sound = AudioSegment.from_file("response.mp3")

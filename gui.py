@@ -172,11 +172,12 @@ class CheckBox:
 class TextInputBox:
     """Multi-line text input using UITextBox with manual editing support"""
 
-    def __init__(self, x, y, width, height, font, manager, placeholder=""):
+    def __init__(self, x, y, width, height, font, manager, placeholder="", voice_only=False):
         self.rect = pygame.Rect(x, y, width, height)
         self.placeholder = placeholder
         self.font = font
         self.active = False
+        self.voice_only = voice_only  # If True, disable keyboard input (voice-only mode)
 
         # Use UITextBox for display with scrollbars
         # Set placeholder as initial HTML if provided
@@ -186,6 +187,9 @@ class TextInputBox:
                 f'<body bgcolor="#FFFFFF"><font color="#999999" pixel_size="{MIN_FONT_SIZE}">'
                 f"{placeholder}</font></body>"
             )
+        else:
+            # Empty white background if no placeholder
+            initial_html = '<body bgcolor="#FFFFFF"></body>'
         self.textbox = pygame_gui.elements.UITextBox(
             relative_rect=self.rect,
             html_text=initial_html,
@@ -226,6 +230,10 @@ class TextInputBox:
                 self.active = True
             else:
                 self.active = False
+
+        # Skip keyboard input if voice-only mode is enabled
+        if self.voice_only and event.type == pygame.KEYDOWN:
+            return  # Don't process keyboard input in voice-only mode
 
         if event.type == pygame.KEYDOWN and self.active:
             if event.key == pygame.K_BACKSPACE:
@@ -283,7 +291,7 @@ class TextInputBox:
     def text(self, value):
         self._text = value
         self._lines = value.split("\n") if value else [""]
-        if value:
+        if value and value.strip():  # Only show text if it's not empty/whitespace
             escaped_msg = (
                 value.replace("&", "&amp;")
                 .replace("<", "&lt;")
@@ -327,8 +335,9 @@ class TextInputBox:
 
 
 class CreationForm:
-    def __init__(self, screen_width, screen_height):
+    def __init__(self, screen_width, screen_height, speech_recognizer=None):
         self.manager = pygame_gui.UIManager((screen_width, screen_height))
+        self.speech_recognizer = speech_recognizer
         self.font_title = pygame.font.Font(
             "resources/roboto_fonts/Roboto-Bold.ttf",
             max(MIN_FONT_SIZE, int(48 * 0.8)),
@@ -343,7 +352,18 @@ class CreationForm:
         )
         self.width = screen_width
         self.height = screen_height
-
+        
+        # Voice mode state
+        self.voice_mode_active = True
+        self.voice_detected_time = 0
+        self.mic_rect = None
+        self.active_input_index = 0  # Track which input box is currently active
+        # Match ChatGUI style - use same text and color
+        self.hold_text = self.font_input.render("Unmute mic to talk", True, (85, 85, 85))
+        
+        # Question navigation state - show one question at a time
+        self.current_question_index = 0  # Which question is currently displayed (0-3)
+        
         self.questions = [
             "1. What is the name or title of your justice framework?",
             "2. In 1-2 sentences, what does justice mean in this worldview?",
@@ -368,22 +388,19 @@ class CreationForm:
             label_to_box_spacing + box_height + box_to_next_label_spacing
         )  # Total spacing between labels
 
+        # Create labels and input boxes (positions will be set dynamically in draw() for slide layout)
         for i, q in enumerate(self.questions):
-            y_pos = start_y + i * y_padding
             label_surface = self.font_label.render(
                 q, True, (255, 255, 255)
             )  # White text for dark blue background
-            self.labels.append((label_surface, (self.width / 2 - input_w / 2, y_pos)))
+            # Store label surface, position will be set in draw()
+            self.labels.append((label_surface, (0, 0)))  # Position set in draw()
 
-            # Use TextInputBox for multi-line input with scrollbars - same as main page
-            box_rect = pygame.Rect(
-                self.width / 2 - input_w / 2,
-                y_pos + label_to_box_spacing,
-                input_w,
-                input_h,
-            )
-            # Use placeholder text for better UX
-            placeholder_text = f"Enter your answer for question {i+1}..."
+            # Use TextInputBox for multi-line input with scrollbars
+            # Initial position doesn't matter - will be repositioned in draw() for slide layout
+            box_rect = pygame.Rect(0, 0, input_w, input_h)
+            # Use generic placeholder - will be updated dynamically based on current question
+            placeholder_text = "Hold SPACE and speak your answer..."
             textbox = TextInputBox(
                 box_rect.x,
                 box_rect.y,
@@ -392,30 +409,35 @@ class CreationForm:
                 self.font_input,
                 self.manager,
                 placeholder=placeholder_text,
+                voice_only=True,  # Enable voice-only mode for creation form
             )
+            textbox.question_index = i  # Store question index for dynamic placeholder updates
+            # Hide textbox initially - will be shown only for current question
+            if hasattr(textbox, 'textbox'):
+                textbox.textbox.hide()
             self.input_boxes.append(textbox)
+        
+        # Set first input box as active by default
+        if self.input_boxes:
+            self.input_boxes[0].active = True
 
-        # Position save button after the last input box with proper spacing
-        last_box_bottom = (
-            start_y
-            + (len(self.questions) - 1) * y_padding
-            + label_to_box_spacing
-            + box_height
+        # Position "Next Question" / "Save" button below the input box
+        # Button will be repositioned based on current question
+        button_width = 240
+        button_height = 64
+        button_y = start_y + label_to_box_spacing + box_height + 30
+        button_rect = pygame.Rect(
+            self.width / 2 - button_width / 2,
+            button_y,
+            button_width,
+            button_height,
         )
-        save_button_width = 240
-        save_button_height = 64
-        save_rect = pygame.Rect(
-            self.width / 2 - save_button_width / 2,
-            last_box_bottom + 30,  # Add spacing after last input box
-            save_button_width,
-            save_button_height,
-        )
-        self.save_button = Button(
-            save_rect.x,
-            save_rect.y,
-            save_rect.width,
-            save_rect.height,
-            "Save Advocate",
+        self.next_button = Button(
+            button_rect.x,
+            button_rect.y,
+            button_rect.width,
+            button_rect.height,
+            "Next Question (T)",
             self.manager,
         )
 
@@ -432,46 +454,341 @@ class CreationForm:
     def handle_event(self, event):
         self.manager.process_events(event)
 
-        for box in self.input_boxes:
-            box.handle_event(event)
+        # Handle keyboard navigation - T key moves to next question
+        if event.type == pygame.KEYDOWN:
+            if event.key == pygame.K_t:
+                # Move to next question, or save if on last question
+                if self.current_question_index < len(self.questions) - 1:
+                    # Move to next question (slide transition)
+                    self.current_question_index += 1
+                    self.active_input_index = self.current_question_index
+                    # Update active state
+                    for i, box in enumerate(self.input_boxes):
+                        box.active = (i == self.active_input_index)
+                else:
+                    # On last question, save if all fields are filled
+                    return self._try_save()
+            elif event.key == pygame.K_UP:
+                # Move to previous question (slide transition)
+                if self.current_question_index > 0:
+                    self.current_question_index -= 1
+                    self.active_input_index = self.current_question_index
+                    for i, box in enumerate(self.input_boxes):
+                        box.active = (i == self.active_input_index)
+            elif event.key == pygame.K_DOWN:
+                # Move to next question (same as T, but doesn't save on last)
+                if self.current_question_index < len(self.questions) - 1:
+                    self.current_question_index += 1
+                    self.active_input_index = self.current_question_index
+                    for i, box in enumerate(self.input_boxes):
+                        box.active = (i == self.active_input_index)
+            elif event.key == pygame.K_LEFT:
+                # LEFT arrow key to exit (handled in main.py, but return signal here too)
+                return "back"
 
-        if self.save_button.is_clicked(event):
+        # Track which input box is clicked/active
+        if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+            for i, box in enumerate(self.input_boxes):
+                if box.rect.collidepoint(event.pos):
+                    self.active_input_index = i
+                    self.current_question_index = i  # Sync question index
+                    # Update active state for all boxes
+                    for j, b in enumerate(self.input_boxes):
+                        b.active = (j == i)
+                    break
+
+        # Handle microphone button click
+        if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+            if self.mic_rect and self.mic_rect.collidepoint(event.pos):
+                self.voice_mode_active = not self.voice_mode_active
+                return "mic_toggled"
+
+        # Skip keyboard events for voice-only input boxes (they only accept voice input)
+        # Only handle mouse events for the currently visible input box (for clicking/focusing)
+        if 0 <= self.current_question_index < len(self.input_boxes):
+            # Only process mouse events, not keyboard events (voice-only mode)
+            if event.type == pygame.MOUSEBUTTONDOWN:
+                self.input_boxes[self.current_question_index].handle_event(event)
+
+        # Handle next/save button click
+        if self.next_button.is_clicked(event):
+            if self.current_question_index < len(self.questions) - 1:
+                # Move to next question
+                self.current_question_index += 1
+                self.active_input_index = self.current_question_index
+                for i, box in enumerate(self.input_boxes):
+                    box.active = (i == self.active_input_index)
+            else:
+                # Save if on last question
+                return self._try_save()
+        
+        if self.back_button.is_clicked(event):
+            return "back"
+        return None
+    
+    def _try_save(self):
+        """Try to save if all fields are filled"""
+        if all(self.input_boxes[i].text for i in range(len(self.input_boxes))):
             return {
                 "name": self.input_boxes[0].text,
                 "definition": self.input_boxes[1].text,
                 "values": self.input_boxes[2].text,
                 "tone": self.input_boxes[3].text,
             }
-        if self.back_button.is_clicked(event):
-            return "back"
         return None
+    
+    def handle_voice_input(self, text):
+        """Handle voice input by adding it to the currently active input box"""
+        # Use current_question_index instead of active_input_index for voice input
+        if 0 <= self.current_question_index < len(self.input_boxes):
+            active_box = self.input_boxes[self.current_question_index]
+            # Append voice input to existing text (add space if there's existing text)
+            if active_box.text:
+                active_box.text = active_box.text + " " + text
+            else:
+                active_box.text = text
+            self.set_voice_detected()
+            self.active_input_index = self.current_question_index
+    
+    def set_voice_detected(self):
+        """Call this when voice input is detected to update the indicator"""
+        import time
+        self.voice_detected_time = time.time()
+    
+    def get_voice_detected(self):
+        """Return voice_detected_time"""
+        return self.voice_detected_time
+    
+    def is_voice_mode_active(self):
+        """Check if voice mode is currently active"""
+        return self.voice_mode_active
+    
+    def _draw_microphone_indicator(self, screen):
+        """Draw a microphone icon that flashes green when loud audio is detected, red when voice mode is off"""
+        # Position at bottom center of screen
+        mic_size = int(50 * 0.8)
+        mic_x = self.width / 2 - mic_size / 2
+        mic_y = self.height - 100
+
+        # Store rect for click detection (make it slightly larger for easier clicking)
+        click_padding = int(10 * 0.8)
+        self.mic_rect = pygame.Rect(
+            mic_x - click_padding,
+            mic_y - click_padding,
+            mic_size + (click_padding * 2),
+            mic_size + (click_padding * 2),
+        )
+
+        # If voice mode is inactive, show red
+        if not self.voice_mode_active:
+            mic_color = (200, 50, 50)  # Red when voice mode is deactivated
+            text_rect = self.hold_text.get_rect()
+            # Position text below microphone (matching ChatGUI positioning relative to mic)
+            text_rect.top = mic_y + mic_size + 10
+            text_rect.centerx = self.width / 2
+            screen.blit(self.hold_text, text_rect)
+        else:
+            # Get current audio level from speech recognizer
+            audio_level = 0.0
+            if self.speech_recognizer:
+                audio_level = self.speech_recognizer.get_audio_level()
+
+            # Threshold for "loud" audio (adjust as needed, 0.05 = 5% of max volume)
+            loud_threshold = 0.05
+
+            # Color: green when loud audio detected, gray when quiet
+            if (
+                time.time() - self.voice_detected_time < 1
+                or audio_level > loud_threshold
+            ):
+                # Active state - green color (brightness based on audio level)
+                mic_color = (50, 250, 50)  # Green when active, brighter = louder
+                if audio_level > loud_threshold:
+                    self.set_voice_detected()
+            else:
+                # Idle state - gray color
+                mic_color = (150, 150, 150)  # Gray when idle
+
+        # Draw microphone icon (simple shape)
+        # Microphone body (rectangle)
+        body_width = int(mic_size * 0.4)
+        body_height = int(mic_size * 0.7)
+        body_x = mic_x + (mic_size - body_width) // 2
+        body_y = mic_y
+        pygame.draw.rect(
+            screen,
+            mic_color,
+            (body_x, body_y, body_width, body_height),
+            border_radius=3,
+        )
+
+        # Microphone stand (base)
+        stand_width = int(mic_size * 0.6)
+        stand_height = int(mic_size * 0.15)
+        stand_x = mic_x + (mic_size - stand_width) // 2
+        stand_y = mic_y + body_height
+        pygame.draw.rect(
+            screen,
+            mic_color,
+            (stand_x, stand_y, stand_width, stand_height),
+            border_radius=2,
+        )
+
+        # Microphone grille lines (optional detail)
+        for i in range(3):
+            line_y = body_y + int(body_height * (0.3 + i * 0.2))
+            pygame.draw.line(
+                screen,
+                mic_color,
+                (body_x + 2, line_y),
+                (body_x + body_width - 2, line_y),
+                width=1,
+            )
+        
+        # Progress indicator is now drawn in draw() method at the top
 
     def draw(self, screen):
         screen.fill((20, 20, 40))  # Dark blue background
+        
+        # Draw slide/page indicator at top (H1: Visibility of system status)
+        self._draw_progress_indicator(screen)
+        
         title_surface = self.font_title.render(
             "Create Your Justice Advocate", True, (255, 255, 255)  # White text
         )
         screen.blit(
             title_surface,
-            (self.width / 2 - title_surface.get_width() / 2, int(50 * 0.8)),
+            (self.width / 2 - title_surface.get_width() / 2, int(80 * 0.8)),
         )
 
-        for label, pos in self.labels:
-            screen.blit(label, pos)
+        # Slide-based display - only show current question (like separate pages)
+        if 0 <= self.current_question_index < len(self.labels):
+            label, pos = self.labels[self.current_question_index]
+            # Reposition label for slide layout (centered, larger)
+            label_y = int(200 * 0.8)
+            screen.blit(label, (self.width / 2 - label.get_width() / 2, label_y))
+        
+        # Hide all textboxes first, then show only the current one
+        for i, box in enumerate(self.input_boxes):
+            if hasattr(box, 'textbox'):
+                if i == self.current_question_index:
+                    box.textbox.show()
+                else:
+                    box.textbox.hide()
+        
+        # Only draw the current question's input box (centered, larger for slide feel)
+        if 0 <= self.current_question_index < len(self.input_boxes):
+            current_box = self.input_boxes[self.current_question_index]
+            # Reposition input box for slide layout
+            input_w = int(self.width * 0.7)  # Wider for slide feel
+            input_h = int(150 * 0.8)  # Taller for slide feel
+            input_x = int(self.width / 2 - input_w / 2)
+            input_y = int(280 * 0.8)
+            
+            # Update rect and textbox dimensions
+            current_box.rect.width = input_w
+            current_box.rect.height = input_h
+            current_box.rect.x = input_x
+            current_box.rect.y = input_y
+            # Update the underlying UITextBox dimensions
+            if hasattr(current_box, 'textbox'):
+                current_box.textbox.set_dimensions((input_w, input_h))
+                current_box.textbox.set_relative_position((input_x, input_y))
+            
+            current_box.draw(screen)
+            
+            # Highlight the active input box with a subtle border
+            pygame.draw.rect(
+                screen,
+                (100, 200, 255),  # Light blue border
+                current_box.rect,
+                width=3,
+            )
+            
+            # Update placeholder text dynamically based on current question
+            # This ensures the placeholder always shows the correct question number
+            if hasattr(current_box, 'question_index'):
+                updated_placeholder = f"Hold SPACE and speak your answer for question {self.current_question_index + 1}..."
+                if current_box.placeholder != updated_placeholder:
+                    current_box.placeholder = updated_placeholder
+                    # Update the textbox placeholder if empty
+                    if not current_box.text:
+                        current_box.text = ""  # This will trigger placeholder display
+            
+            # Show voice-only indicator if box is empty (centered, but below the placeholder area)
+            if not current_box.text:
+                voice_indicator = self.font_input.render(
+                    "Voice input only - Hold SPACE to speak", 
+                    True, 
+                    (120, 120, 120)  # Slightly darker gray
+                )
+                indicator_rect = voice_indicator.get_rect()
+                indicator_rect.centerx = current_box.rect.centerx
+                # Position below center to avoid overlapping with placeholder
+                indicator_rect.centery = current_box.rect.centery + 20
+                screen.blit(voice_indicator, indicator_rect)
 
-        # Draw white backgrounds for input boxes before pygame-gui renders
-        # This ensures the UITextBox scrollbars work properly
-        for box in self.input_boxes:
-            box.draw(screen)
-
-        self.save_button.draw(screen)
-        self.back_button.draw(screen)
+        # Update button label based on current question
+        if self.current_question_index < len(self.questions) - 1:
+            self.next_button.set_label("Next Question (T)")
+        else:
+            self.next_button.set_label("Save Advocate (T)")
+        
+        # Position button below input box
+        button_y = int(280 * 0.8) + int(150 * 0.8) + 40
+        self.next_button.set_position((self.width / 2 - self.next_button.rect.width / 2, button_y))
+        
+        self.next_button.draw(screen)
+        
+        # Back button hidden - use LEFT arrow key instead (H3: User control and freedom)
+        # self.back_button.draw(screen)  # Hidden but functionality available via LEFT key
+        
+        # Draw microphone indicator
+        self._draw_microphone_indicator(screen)
+        
+        # Draw navigation hints (H6: Recognition rather than recall)
+        # Use LEFT instead of arrow symbol for better compatibility
+        hint_text = self.font_input.render(
+            "UP/DOWN: Navigate | T: Next/Save | LEFT: Back", True, (180, 180, 180)
+        )
+        hint_rect = hint_text.get_rect()
+        hint_rect.centerx = self.width / 2
+        hint_rect.bottom = self.height - 20
+        screen.blit(hint_text, hint_rect)
 
         # Update and draw pygame-gui elements (including UITextBox with scrollbars)
         self.manager.update(pygame.time.get_ticks() / 1000.0)
         self.manager.draw_ui(screen)
-        self.save_button.draw_label(screen)
-        self.back_button.draw_label(screen)
+        self.next_button.draw_label(screen)
+        # self.back_button.draw_label(screen)  # Hidden - use LEFT key instead
+    
+    def _draw_progress_indicator(self, screen):
+        """Draw progress indicator showing which slide/page (H1: Visibility of system status)"""
+        # Draw progress dots/circles at the top
+        dot_radius = 8
+        dot_spacing = 30
+        total_width = (len(self.questions) - 1) * dot_spacing
+        start_x = self.width / 2 - total_width / 2
+        y_pos = int(30 * 0.8)
+        
+        for i in range(len(self.questions)):
+            x_pos = start_x + i * dot_spacing
+            # Current question is filled, others are outlined
+            if i == self.current_question_index:
+                pygame.draw.circle(screen, (100, 200, 255), (int(x_pos), y_pos), dot_radius)
+            else:
+                pygame.draw.circle(screen, (100, 200, 255), (int(x_pos), y_pos), dot_radius, width=2)
+        
+        # Draw progress text
+        progress_text = self.font_input.render(
+            f"Page {self.current_question_index + 1} of {len(self.questions)}", 
+            True, 
+            (200, 200, 200)
+        )
+        progress_rect = progress_text.get_rect()
+        progress_rect.centerx = self.width / 2
+        progress_rect.top = y_pos + dot_radius + 10
+        screen.blit(progress_text, progress_rect)
 
 
 class ChatGUI:
@@ -701,9 +1018,25 @@ class ChatGUI:
 
     def handle_event(self, event):
         self.manager.process_events(event)
-        button = [pygame.K_LEFT, pygame.K_UP, pygame.K_RIGHT, pygame.K_DOWN, pygame.K_t]
+        # Map checkboxes to buttons: LEFT, UP, RIGHT, DOWN only (T reserved for creation mode)
+        # SPACE is reserved exclusively for microphone muting - never used for checkboxes
+        button = [pygame.K_LEFT, pygame.K_UP, pygame.K_RIGHT, pygame.K_DOWN]
+        # Only map buttons to checkboxes that exist (max 4 buttons for 4 default agents)
         for i, checkbox in enumerate(self.checkboxes):
-            checkbox.handle_event(event, button[i])
+            if i < len(button):  # Only map if we have a button available
+                checkbox.handle_event(event, button[i])
+        
+        # Handle 'C' key to toggle custom advocate (if one is selected)
+        if event.type == pygame.KEYDOWN:
+            if event.key == pygame.K_c:
+                # Find the custom advocate checkbox (if it exists)
+                for checkbox in self.checkboxes:
+                    if (self.selected_custom_justice and 
+                        checkbox.label == self.selected_custom_justice):
+                        # Toggle the custom advocate checkbox
+                        checkbox._checked = not checkbox._checked
+                        checkbox.checkbox.set_state(checkbox._checked)
+                        break
 
         # Handle next button for cycling through messages
         """if self.next_message_button.is_clicked(event):
@@ -949,31 +1282,20 @@ class ChatGUI:
         ][0] - int(70 * 0.8)
 
         # Custom justice gets the 5th position (top-left)
-        if agent_name == self.selected_custom_justice:
+        # If not in default positions, it's a custom advocate
+        if agent_name not in sprite_positions:
             return positions[0]  # Top-left position
 
         return sprite_positions.get(agent_name)
 
     def _draw_sprites(self, screen):
-        # Draw default justices
+        # Simple logic: checkbox checked = sprite appears
         for checkbox in self.checkboxes:
             if checkbox.is_on:
-                sprite_pos = None
-                sprite_surface = None
-
-                # Check if it's a default justice
-                if checkbox.label in self.sprites:
-                    sprite_pos = self._get_sprite_pos(checkbox.label)
-                    if sprite_pos:
-                        sprite_surface = self.sprites[checkbox.label]
-                # Check if it's the selected custom justice
-                elif checkbox.label == self.selected_custom_justice:
-                    sprite_pos = self._get_sprite_pos(checkbox.label)
-                    if sprite_pos:
-                        sprite_surface = self.mystery_sprite
-
-                # Draw sprite if found
-                if sprite_pos and sprite_surface:
+                sprite_pos = self._get_sprite_pos(checkbox.label)
+                if sprite_pos:
+                    # Use default sprite if available, otherwise use mystery sprite for custom advocates
+                    sprite_surface = self.sprites.get(checkbox.label, self.mystery_sprite)
                     screen.blit(sprite_surface, sprite_pos)
 
                     """# Draw blinking border if agent is thinking
@@ -1514,6 +1836,9 @@ class AdvocateSelectionScreen:
         self.scroll_speed = 50
         self.item_height = 80
         self.visible_items = int((screen_height - 200) / self.item_height)
+        
+        # Keyboard navigation state
+        self.selected_index = 0  # Which advocate is currently selected (for keyboard navigation)
 
         # Create buttons ONLY for custom advocates (not default justices)
         self.advocate_buttons = []
@@ -1579,6 +1904,31 @@ class AdvocateSelectionScreen:
     def handle_event(self, event):
         self.manager.process_events(event)
 
+        # Handle keyboard navigation using existing buttons (UP/DOWN/T)
+        if event.type == pygame.KEYDOWN:
+            if event.key == pygame.K_UP:
+                # Move selection up
+                if self.selected_index > 0:
+                    self.selected_index -= 1
+                    # Auto-scroll if needed
+                    self._update_scroll_for_selection()
+                return None  # Consume event to prevent other handlers
+            elif event.key == pygame.K_DOWN:
+                # Move selection down
+                if self.selected_index < len(self.advocate_buttons) - 1:
+                    self.selected_index += 1
+                    # Auto-scroll if needed
+                    self._update_scroll_for_selection()
+                return None  # Consume event to prevent other handlers
+            elif event.key == pygame.K_t:
+                # Select current advocate (only if we have buttons)
+                if self.advocate_buttons and 0 <= self.selected_index < len(self.advocate_buttons):
+                    return self.advocate_buttons[self.selected_index].advocate_name
+                return None  # Consume event to prevent triggering creation mode
+            elif event.key == pygame.K_LEFT:
+                # LEFT arrow key to exit (handled in main.py, but return signal here too)
+                return "back"
+
         # Handle scrolling
         if event.type == pygame.MOUSEWHEEL:
             max_scroll = max(
@@ -1595,17 +1945,39 @@ class AdvocateSelectionScreen:
         if self.back_button.is_clicked(event):
             return "back"
 
-        # Check delete buttons first
+        # Check delete buttons first (mouse only - no button pad support to minimize buttons)
         for delete_button in self.delete_buttons:
             if delete_button.is_clicked(event):
                 return ("delete", delete_button.advocate_name)
 
-        # Check selection buttons
-        for button in self.advocate_buttons:
+        # Check selection buttons (mouse click)
+        for i, button in enumerate(self.advocate_buttons):
             if button.is_clicked(event):
+                self.selected_index = i  # Update selection
                 return button.advocate_name
 
         return None
+    
+    def _update_scroll_for_selection(self):
+        """Auto-scroll to keep selected item visible"""
+        if not self.advocate_buttons:
+            return
+        
+        # Calculate where the selected item should be
+        selected_y = self.start_y + self.selected_index * 80
+        
+        # Check if selected item is above visible area
+        visible_top = 120
+        if selected_y - self.scroll_offset < visible_top:
+            self.scroll_offset = max(0, selected_y - visible_top)
+            self._update_button_positions()
+        
+        # Check if selected item is below visible area
+        visible_bottom = self.screen_height - 120
+        item_bottom = selected_y + 60 - self.scroll_offset
+        if item_bottom > visible_bottom:
+            self.scroll_offset = max(0, selected_y + 60 - visible_bottom)
+            self._update_button_positions()
 
     def _update_button_positions(self):
         """Update button positions based on scroll offset."""
@@ -1649,12 +2021,28 @@ class AdvocateSelectionScreen:
         clip_rect = pygame.Rect(0, 120, self.screen_width, self.screen_height - 120)
         screen.set_clip(clip_rect)
 
-        for button in self.advocate_buttons:
+        for i, button in enumerate(self.advocate_buttons):
             if (
                 button.rect.bottom >= clip_rect.top
                 and button.rect.top <= clip_rect.bottom
             ):
                 button.draw(screen)
+                # Highlight selected advocate for keyboard navigation
+                if i == self.selected_index:
+                    # Draw highlight border around selected button
+                    highlight_rect = pygame.Rect(
+                        button.rect.x - 3,
+                        button.rect.y - 3,
+                        button.rect.width + 6,
+                        button.rect.height + 6,
+                    )
+                    pygame.draw.rect(
+                        screen,
+                        (100, 200, 255),  # Light blue highlight
+                        highlight_rect,
+                        width=3,
+                        border_radius=5,
+                    )
 
         for delete_button in self.delete_buttons:
             if (
@@ -1666,6 +2054,22 @@ class AdvocateSelectionScreen:
         screen.set_clip(None)
 
         self.back_button.draw(screen)
+        
+        # Make back button label visible (H3: User control and freedom)
+        back_label = self.font_small.render("Back (←)", True, (255, 255, 255))
+        back_label_rect = back_label.get_rect()
+        back_label_rect.topleft = (self.back_button.rect.right + 10, self.back_button.rect.y + 10)
+        screen.blit(back_label, back_label_rect)
+        
+        # Show keyboard navigation hint (H6: Recognition rather than recall)
+        if self.advocate_buttons:
+            hint_text = self.font_small.render(
+                "UP/DOWN: Navigate | T: Select | ←: Back", True, (200, 200, 200)
+            )
+            hint_rect = hint_text.get_rect()
+            hint_rect.centerx = self.screen_width / 2
+            hint_rect.bottom = self.screen_height - 20
+            screen.blit(hint_text, hint_rect)
 
         self.manager.update(pygame.time.get_ticks() / 1000.0)
         self.manager.draw_ui(screen)
